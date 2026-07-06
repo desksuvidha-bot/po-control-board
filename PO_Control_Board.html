@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PO Control Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Firebase (compat build - simple script-tag usage, no build tools needed) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+:root{
+  --bg:#eef3fb; --bg-2:#e3ecfb; --panel:#ffffff; --panel-soft:#f5f8fe; --ink:#0f2547;
+  --blue:#2f6fed; --blue-deep:#1c4fc4; --blue-pale:#dbe7ff; --line:#dde6f7;
+  --slate:#6b7c98; --slate-dim:#a8b6cc; --green:#1f9d55; --green-pale:#dff5e7;
+  --amber:#e0972a; --amber-pale:#fdf0dc; --red:#e2574c; --red-pale:#fde6e3;
+  --shadow: 0 10px 30px -12px rgba(30,70,150,0.18); --shadow-sm: 0 4px 14px -6px rgba(30,70,150,0.14);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background: radial-gradient(circle at 10% -10%, rgba(47,111,237,0.10), transparent 45%),
+    radial-gradient(circle at 100% 0%, rgba(31,157,85,0.06), transparent 40%),
+    linear-gradient(180deg, var(--bg), var(--bg-2));
+  background-attachment:fixed; color:var(--ink); font-family:'Inter',sans-serif;
+  min-height:100vh; -webkit-font-smoothing:antialiased;
+}
+@media (prefers-reduced-motion: reduce){ *{animation-duration:0.01ms !important; transition-duration:0.01ms !important;} }
+.wrap{max-width:1320px;margin:0 auto;padding:28px 24px 60px;}
+
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;
+  padding-bottom:20px;margin-bottom:16px;position:relative;}
+header::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;
+  background:linear-gradient(90deg,var(--blue),transparent 70%);}
+.brand-eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.22em;
+  color:var(--blue);text-transform:uppercase;margin:0 0 6px;font-weight:600;}
+h1{font-family:'Fraunces',serif;font-weight:600;font-size:38px;margin:0;color:var(--ink);letter-spacing:-0.01em;}
+h1 em{font-style:italic;color:var(--blue);font-weight:400;}
+.header-right{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+
+.file-btn{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:10px;
+  background:var(--panel);border:1px solid var(--line);color:var(--ink);
+  padding:11px 18px;border-radius:8px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;
+  letter-spacing:0.04em;cursor:pointer;transition:all .2s; box-shadow:var(--shadow-sm);}
+.file-btn:hover{border-color:var(--blue);transform:translateY(-1px);box-shadow:var(--shadow);}
+.file-btn.locked{opacity:.5;cursor:not-allowed;}
+.file-btn.locked:hover{transform:none;box-shadow:var(--shadow-sm);border-color:var(--line);}
+.file-btn input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+.file-btn.locked input{pointer-events:none;}
+.file-btn svg{width:15px;height:15px;stroke:var(--blue);flex:none;}
+.data-pill{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--slate);
+  border:1px dashed var(--slate-dim);padding:8px 12px;border-radius:20px;letter-spacing:.03em;background:var(--panel);}
+.data-pill.live{color:var(--green);border-color:var(--green);border-style:solid;background:var(--green-pale);}
+.data-pill.localmode{color:var(--amber);border-color:var(--amber);border-style:solid;background:var(--amber-pale);}
+
+.setup-banner{background:var(--amber-pale);border:1px solid var(--amber);border-radius:10px;
+  padding:14px 18px;margin-bottom:20px;font-size:13px;line-height:1.6;color:#8a5a10;}
+.setup-banner code{background:#fff;padding:1px 6px;border-radius:4px;font-family:'IBM Plex Mono',monospace;}
+.setup-banner strong{color:#6b4306;}
+
+.lock-note{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--amber);margin-top:8px;
+  display:flex;align-items:center;gap:6px;}
+
+.search-wrap{position:relative;margin-bottom:24px;}
+.search-box{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;padding:13px 18px;box-shadow:var(--shadow-sm);transition:border-color .2s, box-shadow .2s;}
+.search-box:focus-within{border-color:var(--blue);box-shadow:0 0 0 4px var(--blue-pale);}
+.search-box svg{width:17px;height:17px;stroke:var(--slate);flex:none;}
+.search-box input{flex:1;border:none;outline:none;font-family:'Inter',sans-serif;font-size:14.5px;background:transparent;color:var(--ink);}
+.search-box input::placeholder{color:var(--slate-dim);}
+.search-results{position:absolute;top:calc(100% + 8px);left:0;right:0;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);z-index:30;
+  max-height:360px;overflow-y:auto;display:none;animation:dropIn .18s ease;}
+@keyframes dropIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
+.search-results.show{display:block;}
+.sr-item{padding:12px 18px;border-bottom:1px solid var(--line);}
+.sr-item:last-child{border-bottom:none;}
+.sr-name{font-weight:600;font-size:14.5px;color:var(--ink);}
+.sr-meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--slate);margin-top:2px;}
+.sr-dates{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+.sr-date-chip{font-family:'IBM Plex Mono',monospace;font-size:11.5px;padding:5px 10px;border-radius:6px;
+  background:var(--blue-pale);color:var(--blue-deep);cursor:pointer;border:1px solid transparent;transition:.15s;font-weight:600;}
+.sr-date-chip:hover{background:var(--blue);color:#fff;transform:translateY(-1px);}
+.sr-date-chip.done{background:var(--green-pale);color:var(--green);}
+.sr-date-chip.hold{background:var(--amber-pale);color:var(--amber);}
+.sr-empty{padding:20px;text-align:center;color:var(--slate);font-size:13px;}
+
+.empty{border:1px dashed var(--line);border-radius:12px;padding:70px 30px;text-align:center;
+  color:var(--slate);background:var(--panel);box-shadow:var(--shadow-sm);}
+.empty svg{width:46px;height:46px;stroke:var(--blue);margin-bottom:14px;}
+.empty h2{font-family:'Fraunces',serif;font-size:22px;color:var(--ink);margin:0 0 8px;font-weight:600;}
+.empty p{margin:0;font-size:14px;line-height:1.6;max-width:460px;margin:0 auto;}
+
+.board{display:grid;grid-template-columns:1fr 400px;gap:24px;align-items:start;}
+@media (max-width:960px){.board{grid-template-columns:1fr;}}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;
+  position:relative;box-shadow:var(--shadow-sm);animation:fadeUp .4s ease;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+.cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.cal-title{font-family:'Fraunces',serif;font-size:24px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:10px;}
+.month-tag{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:4px 9px;border-radius:12px;letter-spacing:.05em;}
+.month-tag.current{background:var(--blue-pale);color:var(--blue-deep);}
+.month-tag.past{background:var(--panel-soft);color:var(--slate);border:1px solid var(--line);}
+.cal-nav{display:flex;gap:8px;}
+.cal-nav button{background:var(--panel-soft);border:1px solid var(--line);color:var(--ink);
+  width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:16px;display:flex;
+  align-items:center;justify-content:center;transition:.15s;}
+.cal-nav button:hover{background:var(--blue);color:#fff;border-color:var(--blue);transform:translateY(-1px);}
+
+.person-row{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;}
+.person-chip{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.04em;
+  padding:7px 14px;border-radius:20px;border:1px solid var(--line);background:var(--panel-soft);
+  color:var(--slate);cursor:pointer;transition:.15s;}
+.person-chip.active{background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600;box-shadow:0 4px 12px -4px rgba(47,111,237,0.5);}
+.person-chip:hover:not(.active){border-color:var(--blue);color:var(--blue-deep);}
+
+.weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:8px;}
+.weekdays span{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--slate-dim);text-align:center;letter-spacing:.08em;font-weight:600;}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+.day{aspect-ratio:1/0.92;border:1px solid var(--line);border-radius:8px;background:var(--panel-soft);
+  padding:6px 4px 4px;position:relative;cursor:pointer;transition:transform .15s, border-color .15s, background .15s, box-shadow .15s;
+  display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;}
+.day.blank{visibility:hidden;pointer-events:none;}
+.day .num{font-family:'Fraunces',serif;font-size:15px;font-weight:600;color:var(--slate-dim);}
+.day.today .num{color:var(--blue);}
+.day.has-po .num{color:var(--ink);}
+.day:hover{transform:translateY(-2px);border-color:var(--blue);box-shadow:var(--shadow-sm);}
+.day.selected{background:var(--blue);border-color:var(--blue);box-shadow:0 6px 16px -6px rgba(47,111,237,0.55);}
+.day.selected .num{color:#fff;}
+.day .tally{display:flex;gap:2px;flex-wrap:wrap;}
+.day .tally i{width:5px;height:5px;border-radius:50%;background:var(--blue-deep);opacity:.55;}
+.day.selected .tally i{background:#fff;opacity:.85;}
+.day .allclear{position:absolute;top:4px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px var(--green-pale);}
+.day.selected .allclear{box-shadow:0 0 0 3px rgba(255,255,255,0.35);}
+.day.today{box-shadow:inset 0 0 0 2px var(--blue);}
+
+.legend{display:flex;gap:18px;margin-top:16px;flex-wrap:wrap;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--slate);}
+.legend span{display:inline-flex;align-items:center;gap:6px;}
+.legend i{width:8px;height:8px;border-radius:50%;display:inline-block;}
+
+.side{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;
+  min-height:560px;display:flex;flex-direction:column;box-shadow:var(--shadow-sm);animation:fadeUp .45s ease;}
+.side-date{font-family:'Fraunces',serif;font-size:26px;font-weight:600;margin:0 0 2px;color:var(--ink);}
+.side-sub{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--slate);letter-spacing:.05em;margin-bottom:16px;}
+
+.status-badges{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+.status-badge{flex:1;min-width:80px;border-radius:10px;padding:10px 12px;cursor:pointer;border:1.5px solid transparent;transition:.15s;text-align:center;}
+.status-badge .count{font-family:'Fraunces',serif;font-size:20px;font-weight:700;display:block;}
+.status-badge .lbl{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.05em;text-transform:uppercase;}
+.status-badge.pending{background:var(--red-pale);color:var(--red);}
+.status-badge.done{background:var(--green-pale);color:var(--green);}
+.status-badge.hold{background:var(--amber-pale);color:var(--amber);}
+.status-badge.active{border-color:currentColor;transform:translateY(-1px);box-shadow:var(--shadow-sm);}
+
+.progress-row{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+.progress-track{flex:1;height:7px;border-radius:4px;background:var(--panel-soft);overflow:hidden;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:4px;transition:width .5s cubic-bezier(.4,0,.2,1);}
+.progress-label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--slate);white-space:nowrap;}
+
+.po-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;
+  overflow-y:auto;max-height:480px;padding-right:4px;scroll-behavior:smooth;}
+.po-list::-webkit-scrollbar{width:5px;}
+.po-list::-webkit-scrollbar-thumb{background:var(--slate-dim);border-radius:3px;}
+.po-item{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--panel-soft);
+  display:flex;align-items:center;gap:10px;position:relative;transition:background .2s, border-color .2s;}
+.po-item.done{background:var(--green-pale);border-color:var(--green);}
+.po-item.hold{background:var(--amber-pale);border-color:var(--amber);}
+.po-item .info{flex:1;min-width:0;}
+.po-item .name{font-weight:600;font-size:14.5px;color:var(--ink);}
+.po-item.done .name{color:var(--green);}
+.po-item.hold .name{color:var(--amber);}
+.po-item .meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--slate);margin-top:2px;}
+.item-actions{display:flex;gap:6px;flex:none;}
+.act-btn{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--line);background:var(--panel);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--slate-dim);transition:.15s;}
+.act-btn svg{width:15px;height:15px;}
+.act-btn.done-btn:hover{border-color:var(--green);color:var(--green);}
+.act-btn.hold-btn:hover{border-color:var(--amber);color:var(--amber);}
+.po-item.done .done-btn{background:var(--green);border-color:var(--green);color:#fff;animation:stamp .32s cubic-bezier(.2,1.4,.5,1);}
+.po-item.hold .hold-btn{background:var(--amber);border-color:var(--amber);color:#fff;animation:stamp .32s cubic-bezier(.2,1.4,.5,1);}
+@keyframes stamp{0%{transform:scale(0.4) rotate(-18deg);opacity:0;}60%{transform:scale(1.15) rotate(4deg);opacity:1;}100%{transform:scale(1) rotate(0);}}
+
+.empty-day{margin:auto;text-align:center;color:var(--slate);padding:40px 10px;}
+.empty-day svg{width:34px;height:34px;stroke:var(--blue);margin-bottom:10px;}
+.empty-day p{font-size:13px;margin:0;}
+
+.spinner{width:22px;height:22px;border:3px solid var(--blue-pale);border-top-color:var(--blue);
+  border-radius:50%;animation:spin .7s linear infinite;margin:auto;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+footer{margin-top:34px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--slate-dim);letter-spacing:.05em;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <p class="brand-eyebrow">Distributor Dispatch Ledger</p>
+      <h1>PO Control <em>Board</em></h1>
+    </div>
+    <div class="header-right">
+      <span class="data-pill" id="dataPill">Connecting&hellip;</span>
+      <label class="file-btn" id="fileBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 21h14"/></svg>
+        <span id="uploadLabel">Upload This Month's Schedule (.xlsx)</span>
+        <input type="file" id="fileInput" accept=".xlsx,.xls">
+      </label>
+    </div>
+  </header>
+
+  <div id="setupBanner" class="setup-banner" style="display:none;">
+    <strong>Local-only mode.</strong> No Firebase project is connected yet, so data is saved only in this browser and won't sync across people or devices.
+    Paste your <code>firebaseConfig</code> into the script near the bottom of this file (look for <code>FIREBASE_CONFIG</code>) and reopen the page to go live and shared.
+  </div>
+
+  <div class="search-wrap" id="searchWrap" style="display:none;">
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input type="text" id="searchInput" placeholder="Search a company in this month's schedule&hellip;">
+    </div>
+    <div class="search-results" id="searchResults"></div>
+  </div>
+
+  <div id="emptyState" class="empty">
+    <div class="spinner"></div>
+  </div>
+
+  <div class="board" id="board" style="display:none;">
+    <div class="panel">
+      <div class="cal-head">
+        <div class="cal-title" id="calTitle">July 2026 <span class="month-tag current" id="monthTag">current</span></div>
+        <div class="cal-nav">
+          <button id="prevMonth">&#8249;</button>
+          <button id="todayBtn" title="Jump to current month">&#8226;</button>
+          <button id="nextMonth">&#8250;</button>
+        </div>
+      </div>
+      <div class="person-row" id="personRow"></div>
+      <div class="weekdays"><span>SUN</span><span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span></div>
+      <div class="grid" id="calGrid"></div>
+      <div class="legend">
+        <span><i style="background:var(--blue-deep);opacity:.55"></i>PO scheduled</span>
+        <span><i style="background:var(--green)"></i>All done</span>
+        <span><i style="background:var(--blue)"></i>Today</span>
+      </div>
+    </div>
+    <div class="side" id="side"></div>
+  </div>
+
+  <footer>Shared log for the team &middot; each month's schedule locks automatically once that month ends</footer>
+</div>
+
+<script>
+/* =====================================================================
+   PASTE YOUR FIREBASE CONFIG HERE (from Firebase Console > Project
+   Settings > Your apps > Web app). Leave as-is to run in local-only
+   (single browser, non-shared) mode for testing.
+   ===================================================================== */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyD7bJsjR4XjpK7aksPVBQ-pTSOBS3bgRgE",
+  authDomain: "po-control-board.firebaseapp.com",
+  projectId: "po-control-board",
+  storageBucket: "po-control-board.firebasestorage.app",
+  messagingSenderId: "1017089067783",
+  appId: "1:1017089067783:web:e440350c1a60d90b2093a2"
+};
+
+const FIREBASE_ENABLED = FIREBASE_CONFIG.apiKey !== "PASTE_YOUR_API_KEY_HERE";
+let db = null;
+if(FIREBASE_ENABLED){
+  firebase.initializeApp(FIREBASE_CONFIG);
+  db = firebase.firestore();
+}
+
+const MONTH_NAMES=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const today = new Date();
+const CURRENT_MONTH_KEY = monthKey(today.getFullYear(), today.getMonth());
+
+let viewYear = today.getFullYear();
+let viewMonth = today.getMonth();
+let selectedDay = today.getDate();
+let activePerson = "ALL";
+let statusFilter = "all";
+
+let scheduleCache = {};   // monthKey -> array of rows (or null = confirmed empty)
+let statusCache = {};     // monthKey -> {key: status}
+let unsubSchedule = null;
+let unsubStatus = null;
+
+function monthKey(y,m){ return `${y}-${String(m+1).padStart(2,'0')}`; }
+function isCurrentMonth(y,m){ return monthKey(y,m) === CURRENT_MONTH_KEY; }
+
+/* ---------------- Local-only fallback storage ---------------- */
+function localGetSchedule(mk){ const s = localStorage.getItem('sched:'+mk); return s ? JSON.parse(s) : null; }
+function localSetSchedule(mk, rows){ localStorage.setItem('sched:'+mk, JSON.stringify(rows)); }
+function localGetStatus(mk){ const s = localStorage.getItem('status:'+mk); return s ? JSON.parse(s) : {}; }
+function localSetStatusEntry(mk, key, val){
+  const obj = localGetStatus(mk);
+  if(val) obj[key] = val; else delete obj[key];
+  localStorage.setItem('status:'+mk, JSON.stringify(obj));
+  statusCache[mk] = obj;
+}
+
+/* ---------------- Data loading per month ---------------- */
+function loadMonth(mk, cb){
+  // detach previous listeners
+  if(unsubSchedule){ unsubSchedule(); unsubSchedule=null; }
+  if(unsubStatus){ unsubStatus(); unsubStatus=null; }
+
+  if(!FIREBASE_ENABLED){
+    scheduleCache[mk] = localGetSchedule(mk);
+    statusCache[mk] = localGetStatus(mk);
+    cb();
+    return;
+  }
+
+  let gotSchedule=false, gotStatus=false;
+  const maybeDone = ()=>{ if(gotSchedule && gotStatus) cb(); };
+
+  unsubSchedule = db.collection('schedules').doc(mk).onSnapshot(doc=>{
+    scheduleCache[mk] = doc.exists ? doc.data().rows : null;
+    gotSchedule = true;
+    maybeDone();
+    if(gotSchedule && gotStatus) rerenderAll();
+  }, err=>{ console.error(err); scheduleCache[mk]=null; gotSchedule=true; maybeDone(); });
+
+  unsubStatus = db.collection('statuses').doc(mk).onSnapshot(doc=>{
+    statusCache[mk] = doc.exists ? (doc.data().entries || {}) : {};
+    gotStatus = true;
+    maybeDone();
+    if(gotSchedule && gotStatus) rerenderAll();
+  }, err=>{ console.error(err); statusCache[mk]={}; gotStatus=true; maybeDone(); });
+}
+
+function rerenderAll(){ renderCalendar(); renderSide(); }
+
+function saveSchedule(mk, rows){
+  if(!FIREBASE_ENABLED){ localSetSchedule(mk, rows); scheduleCache[mk]=rows; return Promise.resolve(); }
+  return db.collection('schedules').doc(mk).set({ rows, uploadedAt: firebase.firestore.FieldValue.serverTimestamp() });
+}
+
+function setStatusEntry(mk, key, val){
+  if(!FIREBASE_ENABLED){ localSetStatusEntry(mk, key, val); return; }
+  const update = {};
+  update['entries.'+key] = val ? val : firebase.firestore.FieldValue.delete();
+  db.collection('statuses').doc(mk).set({}, {merge:true}).then(()=>{
+    db.collection('statuses').doc(mk).update(update).catch(()=>{
+      // doc/field path didn't exist yet - set directly
+      const entries = statusCache[mk] || {};
+      if(val) entries[key]=val; else delete entries[key];
+      db.collection('statuses').doc(mk).set({entries}, {merge:true});
+    });
+  });
+}
+
+/* ---------------- Boot ---------------- */
+function boot(){
+  document.getElementById('emptyState').style.display='none';
+  document.getElementById('board').style.display='grid';
+  document.getElementById('searchWrap').style.display='block';
+  document.getElementById('dataPill').textContent = FIREBASE_ENABLED ? 'Live & synced' : 'Local-only mode';
+  document.getElementById('dataPill').className = 'data-pill ' + (FIREBASE_ENABLED ? 'live' : 'localmode');
+  document.getElementById('setupBanner').style.display = FIREBASE_ENABLED ? 'none' : 'block';
+
+  loadMonth(monthKey(viewYear, viewMonth), ()=>{ rerenderAll(); updateUploadLock(); });
+}
+
+document.getElementById('fileInput').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  if(!isCurrentMonth(viewYear, viewMonth)){
+    alert("You can only upload a schedule for the current month. Past months are locked to protect their history.");
+    e.target.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    try{
+      const data = new Uint8Array(evt.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+      const sheetName = wb.SheetNames.find(n => n.trim().toUpperCase() === 'MAIN SHEET') || wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const json = XLSX.utils.sheet_to_json(ws, {defval:null});
+      const parsed = json.map(r => ({
+        company: (r['Company'] ?? '').toString().trim(),
+        companyId: (r['Company ID'] ?? r['Company Id'] ?? '').toString(),
+        poM: r['PO/M'] ?? '',
+        dates: [r['Date 1'], r['Date 2'], r['Date 3'], r['Date 4']].filter(d => d !== null && d !== '' && !isNaN(d)).map(Number),
+        empId: r['EMPID'] ?? '',
+        rp: (r['RP'] ?? '').toString().trim().toUpperCase()
+      })).filter(r => r.company);
+      const mk = monthKey(viewYear, viewMonth);
+      saveSchedule(mk, parsed).then(()=>{
+        scheduleCache[mk] = parsed;
+        rerenderAll();
+      });
+    }catch(err){
+      alert('Could not read that workbook. Make sure it has a "MAIN SHEET" tab with Company, Company ID, PO/M, Date 1-4, EMPID, RP columns.\\n\\n'+err.message);
+    }
+    e.target.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+document.getElementById('prevMonth').addEventListener('click', ()=> shiftMonth(-1));
+document.getElementById('nextMonth').addEventListener('click', ()=> shiftMonth(1));
+document.getElementById('todayBtn').addEventListener('click', ()=>{
+  viewYear = today.getFullYear(); viewMonth = today.getMonth(); selectedDay = today.getDate();
+  loadMonth(monthKey(viewYear, viewMonth), ()=>{ rerenderAll(); updateUploadLock(); });
+});
+
+function shiftMonth(delta){
+  viewMonth += delta;
+  if(viewMonth<0){viewMonth=11; viewYear--;}
+  if(viewMonth>11){viewMonth=0; viewYear++;}
+  selectedDay = null;
+  loadMonth(monthKey(viewYear, viewMonth), ()=>{ rerenderAll(); updateUploadLock(); });
+}
+
+function updateUploadLock(){
+  const btn = document.getElementById('fileBtn');
+  const label = document.getElementById('uploadLabel');
+  const cur = isCurrentMonth(viewYear, viewMonth);
+  btn.classList.toggle('locked', !cur);
+  document.getElementById('fileInput').disabled = !cur;
+  const rows = scheduleCache[monthKey(viewYear, viewMonth)];
+  label.textContent = cur
+    ? (rows && rows.length ? "Update This Month's Schedule (.xlsx)" : "Upload This Month's Schedule (.xlsx)")
+    : "Locked \u2014 past month";
+}
+
+function currentRows(){ return scheduleCache[monthKey(viewYear, viewMonth)] || []; }
+function currentStatuses(){ return statusCache[monthKey(viewYear, viewMonth)] || {}; }
+function daysInMonth(y,m){ return new Date(y, m+1, 0).getDate(); }
+function companiesForDay(day){
+  return currentRows().filter(r => r.dates.includes(day) && (activePerson==="ALL" || r.rp === activePerson));
+}
+function getStatus(day, companyId){ return currentStatuses()[`${day}_${companyId}`] || null; }
+function toggleStatusValue(day, companyId, kind){
+  const cur = getStatus(day, companyId);
+  const next = cur === kind ? null : kind;
+  setStatusEntry(monthKey(viewYear, viewMonth), `${day}_${companyId}`, next);
+  const local = statusCache[monthKey(viewYear, viewMonth)] || {};
+  if(next) local[`${day}_${companyId}`] = next; else delete local[`${day}_${companyId}`];
+  statusCache[monthKey(viewYear, viewMonth)] = local;
+}
+
+function renderPersonChips(){
+  const row = document.getElementById('personRow');
+  row.innerHTML = '';
+  const set = new Set(currentRows().map(r=>r.rp).filter(Boolean));
+  const all = ["ALL", ...Array.from(set).sort()];
+  all.forEach(p=>{
+    const chip = document.createElement('button');
+    chip.className = 'person-chip' + (activePerson===p ? ' active' : '');
+    chip.textContent = p==="ALL" ? "All People" : p;
+    chip.addEventListener('click', ()=>{ activePerson = p; rerenderAll(); });
+    row.appendChild(chip);
+  });
+}
+
+function renderCalendar(){
+  renderPersonChips();
+  const mk = monthKey(viewYear, viewMonth);
+  document.getElementById('calTitle').innerHTML =
+    `${MONTH_NAMES[viewMonth]} ${viewYear} <span class="month-tag ${isCurrentMonth(viewYear,viewMonth)?'current':'past'}">${isCurrentMonth(viewYear,viewMonth)?'current \u00b7 editable':'locked history'}</span>`;
+
+  const grid = document.getElementById('calGrid');
+  grid.innerHTML = '';
+  const firstDow = new Date(viewYear, viewMonth, 1).getDay();
+  const total = daysInMonth(viewYear, viewMonth);
+  for(let i=0;i<firstDow;i++){ const b=document.createElement('div'); b.className='day blank'; grid.appendChild(b); }
+
+  const rows = currentRows();
+  if(rows.length===0 && selectedDay===null){}
+  for(let d=1; d<=total; d++){ grid.appendChild(buildDayCell(d)); }
+}
+
+function buildDayCell(d){
+  const companies = companiesForDay(d);
+  const cell = document.createElement('div');
+  cell.dataset.day = d;
+  cell.className = 'day' + (companies.length? ' has-po':'') + (selectedDay===d?' selected':'') +
+    (d===today.getDate() && viewMonth===today.getMonth() && viewYear===today.getFullYear() ? ' today':'');
+  const allDone = companies.length>0 && companies.every(c=>getStatus(d,c.companyId)==='done');
+  const num = document.createElement('div'); num.className='num'; num.textContent=d;
+  cell.appendChild(num);
+  if(allDone){ const dot=document.createElement('div'); dot.className='allclear'; cell.appendChild(dot); }
+  const tally = document.createElement('div'); tally.className='tally';
+  companies.slice(0,8).forEach(()=>{ const i=document.createElement('i'); tally.appendChild(i); });
+  cell.appendChild(tally);
+  cell.addEventListener('click', ()=>{ selectedDay=d; renderCalendar(); renderSide(); });
+  return cell;
+}
+
+function refreshDayCell(d){
+  const grid = document.getElementById('calGrid');
+  const old = grid.querySelector(`.day[data-day="${d}"]`);
+  if(old) old.replaceWith(buildDayCell(d));
+}
+
+function renderSide(){
+  const side = document.getElementById('side');
+  side.innerHTML = '';
+
+  if(currentRows().length===0){
+    const cur = isCurrentMonth(viewYear, viewMonth);
+    side.innerHTML = `<div class="empty-day">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>
+      <p>${cur ? "No schedule uploaded for "+MONTH_NAMES[viewMonth]+" yet. Use the upload button above to start this month\u2019s log." : "No schedule was ever uploaded for "+MONTH_NAMES[viewMonth]+" "+viewYear+"."}</p>
+    </div>`;
+    return;
+  }
+
+  if(!selectedDay){
+    side.innerHTML = `<div class="empty-day"><p>Pick a date on the ledger to see its POs.</p></div>`;
+    return;
+  }
+
+  const allCompanies = companiesForDay(selectedDay);
+  const dateObj = new Date(viewYear, viewMonth, selectedDay);
+  const wk = dateObj.toLocaleDateString('en-US', {weekday:'long'});
+  const head = document.createElement('div');
+  head.innerHTML = `<div class="side-date">${wk}, ${selectedDay}</div>
+    <div class="side-sub">${MONTH_NAMES[viewMonth]} ${viewYear} &middot; ${activePerson==="ALL"?"All People":activePerson}</div>`;
+  side.appendChild(head);
+
+  if(allCompanies.length===0){
+    const e = document.createElement('div');
+    e.className='empty-day';
+    e.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><p>No purchase orders scheduled for this date.</p>`;
+    side.appendChild(e);
+    return;
+  }
+
+  const pendingList = allCompanies.filter(c=>!getStatus(selectedDay,c.companyId));
+  const doneList = allCompanies.filter(c=>getStatus(selectedDay,c.companyId)==='done');
+  const holdList = allCompanies.filter(c=>getStatus(selectedDay,c.companyId)==='hold');
+
+  const badges = document.createElement('div');
+  badges.className='status-badges';
+  badges.innerHTML = `
+    <div class="status-badge pending ${statusFilter==='pending'?'active':''}" data-f="pending"><span class="count">${pendingList.length}</span><span class="lbl">Pending</span></div>
+    <div class="status-badge done ${statusFilter==='done'?'active':''}" data-f="done"><span class="count">${doneList.length}</span><span class="lbl">Done</span></div>
+    <div class="status-badge hold ${statusFilter==='hold'?'active':''}" data-f="hold"><span class="count">${holdList.length}</span><span class="lbl">Hold</span></div>`;
+  badges.querySelectorAll('.status-badge').forEach(b=>{
+    b.addEventListener('click', ()=>{ const f=b.dataset.f; statusFilter = statusFilter===f?'all':f; renderSide(); });
+  });
+  side.appendChild(badges);
+
+  const pct = Math.round((doneList.length/allCompanies.length)*100);
+  const prow = document.createElement('div');
+  prow.className='progress-row';
+  prow.innerHTML = `<div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+    <div class="progress-label">${doneList.length}/${allCompanies.length} done</div>`;
+  side.appendChild(prow);
+
+  const shown = statusFilter==='all' ? allCompanies : statusFilter==='pending' ? pendingList : statusFilter==='done' ? doneList : holdList;
+  const list = document.createElement('ul');
+  list.className='po-list';
+  if(shown.length===0){
+    list.innerHTML = `<div class="empty-day" style="padding:24px 8px;"><p>Nothing in this filter.</p></div>`;
+  }else{
+    shown.forEach(c=> list.appendChild(buildItem(c)));
+  }
+  side.appendChild(list);
+}
+
+function buildItem(c){
+  const status = getStatus(selectedDay, c.companyId);
+  const li = document.createElement('li');
+  li.className='po-item' + (status?' '+status:'');
+  li.dataset.cid = c.companyId;
+  li.innerHTML = `
+    <div class="info">
+      <div class="name">${escapeHtml(c.company)}</div>
+      <div class="meta">ID ${c.companyId} &middot; ${c.poM} PO/mo &middot; ${c.rp}</div>
+    </div>
+    <div class="item-actions">
+      <button class="act-btn hold-btn" title="Hold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+      <button class="act-btn done-btn" title="Mark done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></button>
+    </div>`;
+  li.querySelector('.done-btn').addEventListener('click', ()=> handleToggle(c, 'done'));
+  li.querySelector('.hold-btn').addEventListener('click', ()=> handleToggle(c, 'hold'));
+  return li;
+}
+
+function handleToggle(c, kind){
+  const wasStatus = getStatus(selectedDay, c.companyId);
+  toggleStatusValue(selectedDay, c.companyId, kind);
+  refreshDayCell(selectedDay);
+  const newStatus = getStatus(selectedDay, c.companyId);
+
+  if(statusFilter !== 'all' && statusFilter !== newStatus){
+    const li = document.querySelector(`.po-item[data-cid="${cssEscape(c.companyId)}"]`);
+    if(li){ li.style.transition='opacity .2s, transform .2s'; li.style.opacity='0'; li.style.transform='translateX(8px)';
+      setTimeout(()=> renderSide(), 180); }
+    else renderSide();
+  }else{
+    const li = document.querySelector(`.po-item[data-cid="${cssEscape(c.companyId)}"]`);
+    if(li) li.replaceWith(buildItem(c));
+    updateSummary();
+  }
+}
+
+function updateSummary(){
+  if(!selectedDay) return;
+  const allCompanies = companiesForDay(selectedDay);
+  const pendingList = allCompanies.filter(c=>!getStatus(selectedDay,c.companyId));
+  const doneList = allCompanies.filter(c=>getStatus(selectedDay,c.companyId)==='done');
+  const holdList = allCompanies.filter(c=>getStatus(selectedDay,c.companyId)==='hold');
+  const side = document.getElementById('side');
+  const badge = side.querySelectorAll('.status-badge .count');
+  if(badge.length===3){ badge[0].textContent=pendingList.length; badge[1].textContent=doneList.length; badge[2].textContent=holdList.length; }
+  const pct = allCompanies.length ? Math.round((doneList.length/allCompanies.length)*100) : 0;
+  const fill = side.querySelector('.progress-fill');
+  const label = side.querySelector('.progress-label');
+  if(fill) fill.style.width = pct + '%';
+  if(label) label.textContent = `${doneList.length}/${allCompanies.length} done`;
+}
+
+function cssEscape(s){ return String(s).replace(/["\\]/g, '\\$&'); }
+function escapeHtml(s){ return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+const searchInput = document.getElementById('searchInput');
+const searchResults = document.getElementById('searchResults');
+searchInput.addEventListener('input', ()=>{
+  const q = searchInput.value.trim().toLowerCase();
+  if(!q){ searchResults.classList.remove('show'); searchResults.innerHTML=''; return; }
+  const matches = currentRows().filter(r => r.company.toLowerCase().includes(q)).slice(0,12);
+  if(matches.length===0){
+    searchResults.innerHTML = `<div class="sr-empty">No company matches &ldquo;${escapeHtml(searchInput.value)}&rdquo; in ${MONTH_NAMES[viewMonth]}'s schedule</div>`;
+  }else{
+    searchResults.innerHTML = matches.map(c=>{
+      const chips = c.dates.map(d=>{
+        const st = getStatus(d, c.companyId);
+        return `<span class="sr-date-chip ${st||''}" data-day="${d}">${d} ${MONTH_NAMES[viewMonth].slice(0,3)}</span>`;
+      }).join('');
+      return `<div class="sr-item"><div class="sr-name">${escapeHtml(c.company)}</div>
+        <div class="sr-meta">ID ${c.companyId} &middot; ${c.poM} PO/mo &middot; ${c.rp}</div>
+        <div class="sr-dates">${chips}</div></div>`;
+    }).join('');
+  }
+  searchResults.classList.add('show');
+});
+searchResults.addEventListener('click', (e)=>{
+  const chip = e.target.closest('.sr-date-chip');
+  if(!chip) return;
+  selectedDay = parseInt(chip.dataset.day, 10);
+  searchResults.classList.remove('show');
+  searchInput.value='';
+  renderCalendar(); renderSide();
+  document.getElementById('board').scrollIntoView({behavior:'smooth', block:'start'});
+});
+document.addEventListener('click', (e)=>{ if(!e.target.closest('.search-wrap')) searchResults.classList.remove('show'); });
+
+boot();
+</script>
+</body>
+</html>
