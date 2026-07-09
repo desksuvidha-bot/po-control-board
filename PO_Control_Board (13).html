@@ -1,0 +1,1466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PO Control Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Firebase (compat build - simple script-tag usage, no build tools needed) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
+<style>
+:root{
+  --bg:#eef3fb; --bg-2:#e3ecfb; --panel:#ffffff; --panel-soft:#f5f8fe; --ink:#0f2547;
+  --blue:#2f6fed; --blue-deep:#1c4fc4; --blue-pale:#dbe7ff; --line:#dde6f7;
+  --slate:#6b7c98; --slate-dim:#a8b6cc; --green:#1f9d55; --green-pale:#dff5e7;
+  --amber:#e0972a; --amber-pale:#fdf0dc; --red:#e2574c; --red-pale:#fde6e3;
+  --shadow: 0 10px 30px -12px rgba(30,70,150,0.18); --shadow-sm: 0 4px 14px -6px rgba(30,70,150,0.14);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background: radial-gradient(circle at 10% -10%, rgba(47,111,237,0.10), transparent 45%),
+    radial-gradient(circle at 100% 0%, rgba(31,157,85,0.06), transparent 40%),
+    linear-gradient(180deg, var(--bg), var(--bg-2));
+  background-attachment:fixed; color:var(--ink); font-family:'Inter',sans-serif;
+  min-height:100vh; -webkit-font-smoothing:antialiased;
+}
+@media (prefers-reduced-motion: reduce){ *{animation-duration:0.01ms !important; transition-duration:0.01ms !important;} }
+.wrap{max-width:1320px;margin:0 auto;padding:28px 24px 60px;}
+
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;
+  padding-bottom:20px;margin-bottom:16px;position:relative;}
+header::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;
+  background:linear-gradient(90deg,var(--blue),transparent 70%);}
+.brand-eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.22em;
+  color:var(--blue);text-transform:uppercase;margin:0 0 6px;font-weight:600;}
+h1{font-family:'Fraunces',serif;font-weight:600;font-size:38px;margin:0;color:var(--ink);letter-spacing:-0.01em;}
+h1 em{font-style:italic;color:var(--blue);font-weight:400;}
+.header-right{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+
+.file-btn{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:10px;
+  background:var(--panel);border:1px solid var(--line);color:var(--ink);
+  padding:11px 18px;border-radius:8px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;
+  letter-spacing:0.04em;cursor:pointer;transition:all .2s; box-shadow:var(--shadow-sm);}
+.file-btn:hover{border-color:var(--blue);transform:translateY(-1px);box-shadow:var(--shadow);}
+.file-btn.locked{opacity:.5;cursor:not-allowed;}
+.file-btn.locked:hover{transform:none;box-shadow:var(--shadow-sm);border-color:var(--line);}
+.file-btn input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+.file-btn.locked input{pointer-events:none;}
+.file-btn svg{width:15px;height:15px;stroke:var(--blue);flex:none;}
+.data-pill{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--slate);
+  border:1px dashed var(--slate-dim);padding:8px 12px;border-radius:20px;letter-spacing:.03em;background:var(--panel);}
+.data-pill.live{color:var(--green);border-color:var(--green);border-style:solid;background:var(--green-pale);}
+.data-pill.localmode{color:var(--amber);border-color:var(--amber);border-style:solid;background:var(--amber-pale);}
+
+.setup-banner{background:var(--amber-pale);border:1px solid var(--amber);border-radius:10px;
+  padding:14px 18px;margin-bottom:20px;font-size:13px;line-height:1.6;color:#8a5a10;}
+.setup-banner code{background:#fff;padding:1px 6px;border-radius:4px;font-family:'IBM Plex Mono',monospace;}
+.setup-banner strong{color:#6b4306;}
+
+.lock-note{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--amber);margin-top:8px;
+  display:flex;align-items:center;gap:6px;}
+
+.search-wrap{position:relative;margin-bottom:24px;}
+.search-box{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;padding:13px 18px;box-shadow:var(--shadow-sm);transition:border-color .2s, box-shadow .2s;}
+.search-box:focus-within{border-color:var(--blue);box-shadow:0 0 0 4px var(--blue-pale);}
+.search-box svg{width:17px;height:17px;stroke:var(--slate);flex:none;}
+.search-box input{flex:1;border:none;outline:none;font-family:'Inter',sans-serif;font-size:14.5px;background:transparent;color:var(--ink);}
+.search-box input::placeholder{color:var(--slate-dim);}
+.search-results{position:absolute;top:calc(100% + 8px);left:0;right:0;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);z-index:30;
+  max-height:360px;overflow-y:auto;display:none;animation:dropIn .18s ease;}
+@keyframes dropIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
+.search-results.show{display:block;}
+.sr-item{padding:12px 18px;border-bottom:1px solid var(--line);}
+.sr-item:last-child{border-bottom:none;}
+.sr-name{font-weight:600;font-size:14.5px;color:var(--ink);}
+.sr-meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--slate);margin-top:2px;}
+.sr-dates{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+.sr-date-chip{font-family:'IBM Plex Mono',monospace;font-size:11.5px;padding:5px 10px;border-radius:6px;
+  background:var(--blue-pale);color:var(--blue-deep);cursor:pointer;border:1px solid transparent;transition:.15s;font-weight:600;}
+.sr-date-chip:hover{background:var(--blue);color:#fff;transform:translateY(-1px);}
+.sr-date-chip.done{background:var(--green-pale);color:var(--green);}
+.sr-date-chip.hold{background:var(--amber-pale);color:var(--amber);}
+.sr-empty{padding:20px;text-align:center;color:var(--slate);font-size:13px;}
+
+.empty{border:1px dashed var(--line);border-radius:12px;padding:70px 30px;text-align:center;
+  color:var(--slate);background:var(--panel);box-shadow:var(--shadow-sm);}
+.empty svg{width:46px;height:46px;stroke:var(--blue);margin-bottom:14px;}
+.empty h2{font-family:'Fraunces',serif;font-size:22px;color:var(--ink);margin:0 0 8px;font-weight:600;}
+.empty p{margin:0;font-size:14px;line-height:1.6;max-width:460px;margin:0 auto;}
+
+.board{display:grid;grid-template-columns:1fr 400px;gap:24px;align-items:start;}
+@media (max-width:960px){.board{grid-template-columns:1fr;}}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;
+  position:relative;box-shadow:var(--shadow-sm);animation:fadeUp .4s ease;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+.cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.cal-title{font-family:'Fraunces',serif;font-size:24px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:10px;}
+.month-tag{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:4px 9px;border-radius:12px;letter-spacing:.05em;}
+.month-tag.current{background:var(--blue-pale);color:var(--blue-deep);}
+.month-tag.past{background:var(--panel-soft);color:var(--slate);border:1px solid var(--line);}
+.cal-nav{display:flex;gap:8px;}
+.cal-nav button{background:var(--panel-soft);border:1px solid var(--line);color:var(--ink);
+  width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:16px;display:flex;
+  align-items:center;justify-content:center;transition:.15s;}
+.cal-nav button:hover{background:var(--blue);color:#fff;border-color:var(--blue);transform:translateY(-1px);}
+
+.person-row{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;}
+.person-chip{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.04em;
+  padding:7px 14px;border-radius:20px;border:1px solid var(--line);background:var(--panel-soft);
+  color:var(--slate);cursor:pointer;transition:.15s;}
+.person-chip.active{background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600;box-shadow:0 4px 12px -4px rgba(47,111,237,0.5);}
+.person-chip:hover:not(.active){border-color:var(--blue);color:var(--blue-deep);}
+
+.weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:8px;}
+.weekdays span{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--slate-dim);text-align:center;letter-spacing:.08em;font-weight:600;}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+.day{aspect-ratio:1/0.92;border:1px solid var(--line);border-radius:8px;background:var(--panel-soft);
+  padding:6px 4px 4px;position:relative;cursor:pointer;transition:transform .15s, border-color .15s, background .15s, box-shadow .15s;
+  display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;}
+.day.blank{visibility:hidden;pointer-events:none;}
+.day .num{font-family:'Fraunces',serif;font-size:15px;font-weight:600;color:var(--slate-dim);}
+.day.today .num{color:var(--blue);}
+.day.has-po .num{color:var(--ink);}
+.day:hover{transform:translateY(-2px);border-color:var(--blue);box-shadow:var(--shadow-sm);}
+.day.selected{background:var(--blue);border-color:var(--blue);box-shadow:0 6px 16px -6px rgba(47,111,237,0.55);}
+.day.selected .num{color:#fff;}
+.day .tally{display:flex;gap:2px;flex-wrap:wrap;}
+.day .tally i{width:5px;height:5px;border-radius:50%;background:var(--blue-deep);opacity:.55;}
+.day.selected .tally i{background:#fff;opacity:.85;}
+.day .allclear{position:absolute;top:4px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px var(--green-pale);}
+.day.selected .allclear{box-shadow:0 0 0 3px rgba(255,255,255,0.35);}
+.day.today{box-shadow:inset 0 0 0 2px var(--blue);}
+
+.legend{display:flex;gap:18px;margin-top:16px;flex-wrap:wrap;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--slate);}
+.legend span{display:inline-flex;align-items:center;gap:6px;}
+.legend i{width:8px;height:8px;border-radius:50%;display:inline-block;}
+
+.side{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;
+  min-height:560px;display:flex;flex-direction:column;box-shadow:var(--shadow-sm);animation:fadeUp .45s ease;}
+.side-date{font-family:'Fraunces',serif;font-size:26px;font-weight:600;margin:0 0 2px;color:var(--ink);}
+.side-sub{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--slate);letter-spacing:.05em;margin-bottom:16px;}
+
+.status-badges{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+.status-badge{flex:1;min-width:80px;border-radius:10px;padding:10px 12px;cursor:pointer;border:1.5px solid transparent;transition:.15s;text-align:center;}
+.status-badge .count{font-family:'Fraunces',serif;font-size:20px;font-weight:700;display:block;}
+.status-badge .lbl{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.05em;text-transform:uppercase;}
+.status-badge.pending{background:var(--red-pale);color:var(--red);}
+.status-badge.done{background:var(--green-pale);color:var(--green);}
+.status-badge.hold{background:var(--amber-pale);color:var(--amber);}
+.status-badge.active{border-color:currentColor;transform:translateY(-1px);box-shadow:var(--shadow-sm);}
+
+.progress-row{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+.progress-track{flex:1;height:7px;border-radius:4px;background:var(--panel-soft);overflow:hidden;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:4px;transition:width .5s cubic-bezier(.4,0,.2,1);}
+.progress-label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--slate);white-space:nowrap;}
+
+.po-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;
+  overflow-y:auto;max-height:480px;padding-right:4px;}
+.po-list::-webkit-scrollbar{width:5px;}
+.po-list::-webkit-scrollbar-thumb{background:var(--slate-dim);border-radius:3px;}
+.po-item{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--panel-soft);
+  display:flex;align-items:center;gap:10px;position:relative;transition:background .2s, border-color .2s;}
+.po-item.done{background:var(--green-pale);border-color:var(--green);}
+.po-item.hold{background:var(--amber-pale);border-color:var(--amber);}
+.po-item .info{flex:1;min-width:0;}
+.po-item .name{font-weight:600;font-size:14.5px;color:var(--ink);}
+.po-item.done .name{color:var(--green);}
+.po-item.hold .name{color:var(--amber);}
+.po-item .meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--slate);margin-top:2px;}
+.item-actions{display:flex;gap:6px;flex:none;}
+.act-btn{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--line);background:var(--panel);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--slate-dim);transition:.15s;}
+.act-btn svg{width:15px;height:15px;}
+.act-btn.done-btn:hover{border-color:var(--green);color:var(--green);}
+.act-btn.hold-btn:hover{border-color:var(--amber);color:var(--amber);}
+.po-item.done .done-btn{background:var(--green);border-color:var(--green);color:#fff;animation:stamp .32s cubic-bezier(.2,1.4,.5,1);}
+.po-item.hold .hold-btn{background:var(--amber);border-color:var(--amber);color:#fff;animation:stamp .32s cubic-bezier(.2,1.4,.5,1);}
+@keyframes stamp{0%{transform:scale(0.4) rotate(-18deg);opacity:0;}60%{transform:scale(1.15) rotate(4deg);opacity:1;}100%{transform:scale(1) rotate(0);}}
+
+.empty-day{margin:auto;text-align:center;color:var(--slate);padding:40px 10px;}
+.empty-day svg{width:34px;height:34px;stroke:var(--blue);margin-bottom:10px;}
+.empty-day p{font-size:13px;margin:0;}
+
+.spinner{width:22px;height:22px;border:3px solid var(--blue-pale);border-top-color:var(--blue);
+  border-radius:50%;animation:spin .7s linear infinite;margin:auto;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+footer{margin-top:34px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--slate-dim);letter-spacing:.05em;}
+
+/* ---------- LOGIN SCREEN ---------- */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;}
+.login-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:40px 36px;
+  width:100%;max-width:380px;box-shadow:var(--shadow);animation:fadeUp .45s ease;}
+.login-card .brand-eyebrow{text-align:center;}
+.login-card h1{font-size:28px;text-align:center;margin-bottom:26px;}
+.login-field{margin-bottom:14px;}
+.login-field label{display:block;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--slate);
+  letter-spacing:.05em;margin-bottom:6px;text-transform:uppercase;}
+.login-field input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:8px;
+  font-family:'Inter',sans-serif;font-size:14.5px;background:var(--panel-soft);color:var(--ink);
+  outline:none;transition:border-color .2s, box-shadow .2s;}
+.login-field input:focus{border-color:var(--blue);box-shadow:0 0 0 4px var(--blue-pale);}
+.login-submit{width:100%;padding:13px;border:none;border-radius:8px;background:var(--blue);color:#fff;
+  font-family:'Inter',sans-serif;font-weight:600;font-size:14.5px;cursor:pointer;margin-top:8px;
+  transition:transform .15s, box-shadow .15s;}
+.login-submit:hover{transform:translateY(-1px);box-shadow:0 8px 20px -8px rgba(47,111,237,0.6);}
+.login-submit:active{transform:translateY(0);}
+.login-error{color:var(--red);font-size:12.5px;margin-top:12px;text-align:center;min-height:16px;}
+.signout-btn{background:var(--panel);border:1px solid var(--line);color:var(--slate);
+  padding:9px 14px;border-radius:8px;font-family:'IBM Plex Mono',monospace;font-size:12px;cursor:pointer;
+  transition:.15s;}
+.signout-btn:hover{border-color:var(--red);color:var(--red);}
+
+/* ---------- VIEW TABS ---------- */
+.view-tabs{display:flex;gap:8px;margin-bottom:20px;}
+.view-tab{font-family:'IBM Plex Mono',monospace;font-size:12.5px;letter-spacing:.04em;
+  padding:10px 18px;border-radius:8px;border:1px solid var(--line);background:var(--panel);
+  color:var(--slate);cursor:pointer;transition:.15s;display:flex;align-items:center;gap:7px;}
+.view-tab svg{width:14px;height:14px;}
+.view-tab.active{background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600;
+  box-shadow:0 4px 12px -4px rgba(47,111,237,0.5);}
+.view-tab:hover:not(.active){border-color:var(--blue);color:var(--blue-deep);}
+.hold-count-pill{background:var(--amber);color:#fff;border-radius:10px;font-size:10.5px;
+  padding:1px 7px;font-weight:700;}
+
+/* ---------- HOLD LOG ---------- */
+.hold-log-panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px;
+  box-shadow:var(--shadow-sm);animation:fadeUp .4s ease;}
+.hold-log-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;}
+.hold-log-title{font-family:'Fraunces',serif;font-size:24px;font-weight:600;}
+.hold-log-sub{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--slate);}
+.hold-table{width:100%;border-collapse:collapse;}
+.hold-table th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--slate);padding:10px 12px;border-bottom:2px solid var(--line);}
+.hold-table td{padding:12px;border-bottom:1px solid var(--line);font-size:14px;}
+.hold-table tr{transition:background .15s;}
+.hold-table tr:hover{background:var(--amber-pale);}
+.hold-date-badge{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--amber);
+  background:var(--amber-pale);padding:5px 10px;border-radius:6px;display:inline-block;}
+.hold-actions{display:flex;gap:6px;}
+.hold-mini-btn{border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:6px 10px;
+  font-family:'IBM Plex Mono',monospace;font-size:11px;cursor:pointer;transition:.15s;color:var(--slate);}
+.hold-mini-btn.release:hover{border-color:var(--blue);color:var(--blue-deep);}
+.hold-mini-btn.done:hover{border-color:var(--green);color:var(--green);}
+
+/* ---------- LOGO ---------- */
+.brand-logo{width:52px;height:52px;border-radius:50%;object-fit:cover;box-shadow:var(--shadow-sm);
+  border:2px solid var(--panel);flex:none;}
+.brand-row{display:flex;align-items:center;gap:16px;}
+.login-card .brand-row{justify-content:center;margin-bottom:6px;}
+.login-card .brand-logo{width:56px;height:56px;}
+.brand-text{display:flex;flex-direction:column;}
+
+.mtd-stat{display:flex;align-items:center;gap:12px;background:var(--panel-soft);border:1px solid var(--line);
+  border-radius:10px;padding:12px 16px;margin-bottom:16px;}
+.mtd-stat .mtd-pct{font-family:'Fraunces',serif;font-size:22px;font-weight:700;color:var(--blue-deep);flex:none;}
+.mtd-stat .mtd-body{flex:1;min-width:0;}
+.mtd-stat .mtd-label{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--slate);
+  letter-spacing:.04em;text-transform:uppercase;margin-bottom:5px;}
+.mtd-stat .mtd-track{height:6px;border-radius:4px;background:var(--line);overflow:hidden;}
+.mtd-stat .mtd-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:4px;
+  transition:width .5s cubic-bezier(.4,0,.2,1);}
+</style>
+</head>
+<body>
+
+<div id="loginScreen" class="login-wrap" style="display:none;">
+  <div class="login-card">
+    <div class="brand-row">
+      <img class="brand-logo" id="loginLogo" alt="Logo">
+    </div>
+    <p class="brand-eyebrow">Distributor Dispatch Ledger</p>
+    <h1>PO Control <em>Board</em></h1>
+    <div class="login-field">
+      <label>Email</label>
+      <input type="email" id="loginEmail" autocomplete="username" placeholder="you@company.com">
+    </div>
+    <div class="login-field">
+      <label>Password</label>
+      <input type="password" id="loginPassword" autocomplete="current-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;">
+    </div>
+    <button class="login-submit" id="loginSubmit">Sign In</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<div id="appRoot" style="display:none;">
+<div class="wrap">
+
+  <header>
+    <div class="brand-row">
+      <img class="brand-logo" id="headerLogo" alt="Logo">
+      <div class="brand-text">
+        <p class="brand-eyebrow">Distributor Dispatch Ledger</p>
+        <h1>PO Control <em>Board</em></h1>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="data-pill" id="dataPill">Connecting&hellip;</span>
+      <button class="file-btn" id="manageCompaniesBtn" style="display:none;" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M9 4v16"/></svg>
+        <span>Manage Companies</span>
+      </button>
+      <button class="file-btn" id="exportBtn" style="display:none;" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V3"/><path d="M7 8l5 5 5-5"/><path d="M5 21h14"/></svg>
+        <span>Export Excel</span>
+      </button>
+      <label class="file-btn" id="fileBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 21h14"/></svg>
+        <span id="uploadLabel">Upload This Month's Schedule (.xlsx)</span>
+        <input type="file" id="fileInput" accept=".xlsx,.xls">
+      </label>
+      <span class="data-pill" id="rolePill" style="display:none;color:var(--blue-deep);border-color:var(--blue);border-style:solid;background:var(--blue-pale);"></span>
+      <span class="data-pill" id="viewOnlyPill" style="display:none;color:var(--amber);border-color:var(--amber);border-style:solid;background:var(--amber-pale);">View only</span>
+      <button class="signout-btn" id="signOutBtn" style="display:none;">Sign out</button>
+    </div>
+  </header>
+
+  <div id="setupBanner" class="setup-banner" style="display:none;">
+    <strong>Local-only mode.</strong> No Firebase project is connected yet, so data is saved only in this browser and won't sync across people or devices.
+    Paste your <code>firebaseConfig</code> into the script near the bottom of this file (look for <code>FIREBASE_CONFIG</code>) and reopen the page to go live and shared.
+  </div>
+
+  <div class="view-tabs" id="viewTabs" style="display:none;">
+    <button class="view-tab active" id="tabCalendar" data-view="calendar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>
+      Calendar
+    </button>
+    <button class="view-tab" id="tabHoldLog" data-view="holdlog">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+      Hold Log <span class="hold-count-pill" id="holdCountPill">0</span>
+    </button>
+  </div>
+
+  <div class="search-wrap" id="searchWrap" style="display:none;">
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input type="text" id="searchInput" placeholder="Search a company in this month's schedule&hellip;">
+    </div>
+    <div class="search-results" id="searchResults"></div>
+  </div>
+
+  <div id="emptyState" class="empty">
+    <div class="spinner"></div>
+  </div>
+
+  <div class="board" id="board" style="display:none;">
+    <div class="panel">
+      <div class="cal-head">
+        <div class="cal-title" id="calTitle">July 2026 <span class="month-tag current" id="monthTag">current</span></div>
+        <div class="cal-nav">
+          <button id="prevMonth">&#8249;</button>
+          <button id="todayBtn" title="Jump to current month">&#8226;</button>
+          <button id="nextMonth">&#8250;</button>
+        </div>
+      </div>
+      <div class="person-row" id="personRow"></div>
+      <div id="mtdStat" class="mtd-stat"></div>
+      <div class="weekdays"><span>SUN</span><span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span></div>
+      <div class="grid" id="calGrid"></div>
+      <div class="legend">
+        <span><i style="background:var(--blue-deep);opacity:.55"></i>PO scheduled</span>
+        <span><i style="background:var(--green)"></i>All done</span>
+        <span><i style="background:var(--blue)"></i>Today</span>
+      </div>
+    </div>
+    <div class="side" id="side"></div>
+  </div>
+
+  <div class="hold-log-panel" id="holdLogPanel" style="display:none;"></div>
+
+  <footer>Shared log for the team &middot; each month's schedule locks automatically once that month ends</footer>
+</div>
+</div>
+
+<script>
+/* =====================================================================
+   PASTE YOUR FIREBASE CONFIG HERE (from Firebase Console > Project
+   Settings > Your apps > Web app). Leave as-is to run in local-only
+   (single browser, non-shared) mode for testing.
+   ===================================================================== */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyD7bJsjR4XjpK7aksPVBQ-pTSOBS3bgRgE",
+  authDomain: "po-control-board.firebaseapp.com",
+  projectId: "po-control-board",
+  storageBucket: "po-control-board.firebasestorage.app",
+  messagingSenderId: "1017089067783",
+  appId: "1:1017089067783:web:e440350c1a60d90b2093a2"
+};
+
+const FIREBASE_ENABLED = FIREBASE_CONFIG.apiKey !== "PASTE_YOUR_API_KEY_HERE";
+let db = null, auth = null;
+if(FIREBASE_ENABLED){
+  firebase.initializeApp(FIREBASE_CONFIG);
+  db = firebase.firestore();
+  auth = firebase.auth();
+}
+
+const LOGO_DATA_URI = "data:image/png;base64,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";
+document.getElementById('loginLogo').src = LOGO_DATA_URI;
+document.getElementById('headerLogo').src = LOGO_DATA_URI;
+
+const MONTH_NAMES=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const today = new Date();
+const CURRENT_MONTH_KEY = monthKey(today.getFullYear(), today.getMonth());
+const TODAY_DAY = today.getDate();
+
+let viewYear = today.getFullYear();
+let viewMonth = today.getMonth();
+let selectedDay = today.getDate();
+let activePerson = "ALL";
+let statusFilter = "all";
+let activeView = "calendar"; // calendar | holdlog
+
+let scheduleCache = {};   // monthKey -> array of version objects {effectiveFromDay, uploadedAt, rows}
+let statusCache = {};     // monthKey -> {"day_companyId": "done"|"hold"|{s,c}}
+let rescheduleCache = {}; // monthKey -> {"origDay_companyId": {movedTo, comment, movedAt}}
+let unsubSchedule = null;
+let unsubStatus = null;
+let unsubReschedule = null;
+
+function monthKey(y,m){ return `${y}-${String(m+1).padStart(2,'0')}`; }
+function isCurrentMonth(y,m){ return monthKey(y,m) === CURRENT_MONTH_KEY; }
+function daysInMonth(y,m){ return new Date(y, m+1, 0).getDate(); }
+
+/* ============ AUTH ============ */
+let userRole = 'viewer'; // fail-safe default: 'viewer' | 'editor' | 'superuser'
+const VALID_ROLES = ['viewer','editor','superuser'];
+function canMarkStatus(){ return userRole === 'editor' || userRole === 'superuser'; }
+function canImport(){ return userRole === 'superuser'; }
+function canReschedule(){ return userRole === 'editor' || userRole === 'superuser'; }
+function canManageCompanies(){ return userRole === 'superuser'; }
+
+function initAuth(){
+  if(!FIREBASE_ENABLED){ userRole = 'superuser'; startApp(); return; }
+  auth.onAuthStateChanged(user=>{
+    if(user){
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('appRoot').style.display='block';
+      document.getElementById('signOutBtn').style.display='inline-flex';
+      db.collection('userRoles').doc(user.uid).get().then(doc=>{
+        const raw = doc.exists ? doc.data().role : null;
+        const r = typeof raw === 'string' ? raw.trim().toLowerCase() : null;
+        userRole = VALID_ROLES.includes(r) ? r : 'viewer';
+        console.log('[PO Board] Signed in as', user.email, '\u2192 role field in Firestore:', JSON.stringify(raw), '\u2192 applied as:', userRole);
+        startApp();
+        resetInactivityTimer();
+      }).catch(()=>{ userRole = 'viewer'; startApp(); resetInactivityTimer(); });
+    }else{
+      document.getElementById('loginScreen').style.display='flex';
+      document.getElementById('appRoot').style.display='none';
+    }
+  });
+}
+document.getElementById('loginSubmit').addEventListener('click', doLogin);
+document.getElementById('loginPassword').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+function doLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if(!email || !pass){ errEl.textContent = 'Enter both email and password.'; return; }
+  auth.signInWithEmailAndPassword(email, pass).catch(err=>{
+    errEl.textContent = err.code === 'auth/invalid-credential' || err.code==='auth/wrong-password' || err.code==='auth/user-not-found'
+      ? 'Incorrect email or password.' : err.message;
+  });
+}
+document.getElementById('signOutBtn').addEventListener('click', ()=>{ if(auth) auth.signOut(); });
+
+/* ---------------- Local-only fallback storage ---------------- */
+function localGetSchedule(mk){ const s = localStorage.getItem('sched:'+mk); return s ? JSON.parse(s) : []; }
+function localAddVersion(mk, version){
+  const versions = localGetSchedule(mk); versions.push(version);
+  localStorage.setItem('sched:'+mk, JSON.stringify(versions));
+  scheduleCache[mk] = versions;
+}
+function localGetStatus(mk){ const s = localStorage.getItem('status:'+mk); return s ? JSON.parse(s) : {}; }
+function localSetStatusEntry(mk, key, val){
+  const obj = localGetStatus(mk);
+  if(val) obj[key] = val; else delete obj[key];
+  localStorage.setItem('status:'+mk, JSON.stringify(obj));
+  statusCache[mk] = obj;
+}
+function localGetReschedule(mk){ const s = localStorage.getItem('resched:'+mk); return s ? JSON.parse(s) : {}; }
+function localSetRescheduleEntry(mk, key, val){
+  const obj = localGetReschedule(mk);
+  if(val) obj[key] = val; else delete obj[key];
+  localStorage.setItem('resched:'+mk, JSON.stringify(obj));
+  rescheduleCache[mk] = obj;
+}
+
+/* ---------------- Data loading per month ---------------- */
+function loadMonth(mk, cb){
+  if(unsubSchedule){ unsubSchedule(); unsubSchedule=null; }
+  if(unsubStatus){ unsubStatus(); unsubStatus=null; }
+  if(unsubReschedule){ unsubReschedule(); unsubReschedule=null; }
+
+  if(!FIREBASE_ENABLED){
+    scheduleCache[mk] = localGetSchedule(mk);
+    statusCache[mk] = localGetStatus(mk);
+    rescheduleCache[mk] = localGetReschedule(mk);
+    cb();
+    return;
+  }
+
+  let gotSchedule=false, gotStatus=false, gotReschedule=false;
+  const maybeDone = ()=>{ if(gotSchedule && gotStatus && gotReschedule) cb(); };
+
+  unsubSchedule = db.collection('schedules').doc(mk).onSnapshot(doc=>{
+    scheduleCache[mk] = doc.exists ? (doc.data().versions || []) : [];
+    gotSchedule = true;
+    maybeDone();
+    if(gotSchedule && gotStatus && gotReschedule) rerenderAll();
+  }, err=>{ console.error(err); scheduleCache[mk]=[]; gotSchedule=true; maybeDone(); });
+
+  let statusInitialLoadDone = false;
+  unsubStatus = db.collection('statuses').doc(mk).onSnapshot(doc=>{
+    const newEntries = doc.exists ? (doc.data().entries || {}) : {};
+    statusCache[mk] = newEntries;
+    gotStatus = true;
+    maybeDone();
+    // After the very first load, this listener NEVER triggers a re-render
+    // again. Your own clicks are already reflected instantly by the
+    // optimistic in-place DOM update in handleToggle - that path never
+    // touches scroll. Letting this listener also re-render was the actual
+    // source of every jump so far, so it's fully disabled now. A
+    // teammate's change will appear next time you switch days/months.
+    if(!statusInitialLoadDone){
+      statusInitialLoadDone = true;
+    }
+  }, err=>{ console.error(err); statusCache[mk]={}; gotStatus=true; maybeDone(); });
+
+  let rescheduleInitialLoadDone = false;
+  unsubReschedule = db.collection('reschedules').doc(mk).onSnapshot(doc=>{
+    rescheduleCache[mk] = doc.exists ? (doc.data().entries || {}) : {};
+    gotReschedule = true;
+    maybeDone();
+    if(!rescheduleInitialLoadDone){ rescheduleInitialLoadDone = true; }
+  }, err=>{ console.error(err); rescheduleCache[mk]={}; gotReschedule=true; maybeDone(); });
+}
+
+function rerenderAll(){
+  if(activeView === 'calendar'){ renderCalendar(); renderSideScrollSafe(); }
+  else { renderHoldLog(); }
+  updateHoldCountPill();
+}
+
+/* A new version gets appended with an effectiveFromDay that decides which
+   days it covers. The FIRST schedule ever uploaded for a month covers the
+   whole month (day 1) - there's no prior history to protect yet. Every
+   version AFTER that only applies from TODAY'S real day-of-month onward,
+   so anything already marked/passed on earlier days never changes. */
+function addScheduleVersion(mk, rows){
+  const isFirstEver = sortedVersions(mk).length === 0;
+  const version = { effectiveFromDay: isFirstEver ? 1 : TODAY_DAY, uploadedAt: Date.now(), rows };
+  if(!FIREBASE_ENABLED){ localAddVersion(mk, version); return Promise.resolve(); }
+  const ref = db.collection('schedules').doc(mk);
+  return db.runTransaction(t=>{
+    return t.get(ref).then(doc=>{
+      const versions = doc.exists ? (doc.data().versions || []) : [];
+      const stillFirst = versions.length === 0;
+      version.effectiveFromDay = stillFirst ? 1 : TODAY_DAY;
+      versions.push(version);
+      t.set(ref, { versions });
+    });
+  });
+}
+
+function setStatusEntry(mk, key, val){
+  if(!FIREBASE_ENABLED){ localSetStatusEntry(mk, key, val); return; }
+  const entries = {};
+  entries[key] = val ? val : firebase.firestore.FieldValue.delete();
+  db.collection('statuses').doc(mk).set({ entries }, { merge: true }).catch(err=>console.error(err));
+}
+
+function setRescheduleEntry(mk, key, val){
+  if(!FIREBASE_ENABLED){ localSetRescheduleEntry(mk, key, val); return; }
+  const entries = {};
+  entries[key] = val ? val : firebase.firestore.FieldValue.delete();
+  db.collection('reschedules').doc(mk).set({ entries }, { merge: true }).catch(err=>console.error(err));
+}
+
+/* ---------------- Version-aware schedule lookup ---------------- */
+function sortedVersions(mk){
+  return (scheduleCache[mk] || []).slice().sort((a,b)=> a.effectiveFromDay - b.effectiveFromDay || a.uploadedAt - b.uploadedAt);
+}
+// Rows in effect for a given calendar day, honoring history: the most
+// recent version whose effectiveFromDay <= day "wins" for that day.
+function effectiveRowsForDay(mk, day){
+  const vs = sortedVersions(mk);
+  let chosen = null;
+  for(const v of vs){ if(v.effectiveFromDay <= day) chosen = v; }
+  return chosen ? chosen.rows : [];
+}
+function latestVersionRows(mk){
+  const vs = sortedVersions(mk);
+  return vs.length ? vs[vs.length-1].rows : [];
+}
+function hasAnySchedule(mk){ return sortedVersions(mk).length > 0; }
+
+/* ---------------- Boot ---------------- */
+function startApp(){
+  document.getElementById('emptyState').style.display='none';
+  document.getElementById('board').style.display='grid';
+  document.getElementById('searchWrap').style.display='block';
+  document.getElementById('viewTabs').style.display='flex';
+  document.getElementById('dataPill').textContent = FIREBASE_ENABLED ? 'Live & synced' : 'Local-only mode';
+  document.getElementById('dataPill').className = 'data-pill ' + (FIREBASE_ENABLED ? 'live' : 'localmode');
+  document.getElementById('setupBanner').style.display = FIREBASE_ENABLED ? 'none' : 'block';
+  document.getElementById('fileBtn').style.display = canImport() ? 'inline-flex' : 'none';
+  document.getElementById('viewOnlyPill').style.display = userRole === 'viewer' ? 'inline-flex' : 'none';
+  const rolePill = document.getElementById('rolePill');
+  if(userRole === 'superuser'){ rolePill.style.display='inline-flex'; rolePill.textContent='Superuser'; }
+  else if(userRole === 'editor'){ rolePill.style.display='inline-flex'; rolePill.textContent='Editor'; }
+  else{ rolePill.style.display='none'; }
+
+  loadMonth(monthKey(viewYear, viewMonth), ()=>{ rerenderAll(); updateUploadLock(); });
+}
+
+document.getElementById('tabCalendar').addEventListener('click', ()=> switchView('calendar'));
+document.getElementById('tabHoldLog').addEventListener('click', ()=> switchView('holdlog'));
+function switchView(v){
+  activeView = v;
+  document.getElementById('tabCalendar').classList.toggle('active', v==='calendar');
+  document.getElementById('tabHoldLog').classList.toggle('active', v==='holdlog');
+  document.getElementById('board').style.display = v==='calendar' ? 'grid' : 'none';
+  document.getElementById('holdLogPanel').style.display = v==='holdlog' ? 'block' : 'none';
+  document.getElementById('searchWrap').style.display = v==='calendar' ? 'block' : 'none';
+  rerenderAll();
+}
+
+document.getElementById('fileInput').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  if(!isCurrentMonth(viewYear, viewMonth)){
+    alert("You can only upload a schedule for the current month. Past months are locked to protect their history.");
+    e.target.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    try{
+      const data = new Uint8Array(evt.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+      const sheetName = wb.SheetNames.find(n => n.trim().toUpperCase() === 'MAIN SHEET') || wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const json = XLSX.utils.sheet_to_json(ws, {defval:null});
+      const parsed = json.map(r => ({
+        company: (r['Company'] ?? '').toString().trim(),
+        companyId: (r['Company ID'] ?? r['Company Id'] ?? '').toString(),
+        poM: r['PO/M'] ?? '',
+        dates: [r['Date 1'], r['Date 2'], r['Date 3'], r['Date 4']].filter(d => d !== null && d !== '' && !isNaN(d)).map(Number),
+        empId: r['EMPID'] ?? '',
+        rp: (r['RP'] ?? '').toString().trim().toUpperCase()
+      })).filter(r => r.company);
+      const mk = monthKey(viewYear, viewMonth);
+      const priorCount = sortedVersions(mk).length;
+      addScheduleVersion(mk, parsed).then(()=>{
+        if(!FIREBASE_ENABLED) rerenderAll();
+        const msg = priorCount === 0
+          ? "Schedule uploaded for "+MONTH_NAMES[viewMonth]+"."
+          : "Updated. Days before today ("+TODAY_DAY+" "+MONTH_NAMES[viewMonth]+") keep their original dates \u2014 only today onward uses the new schedule.";
+        showToast(msg);
+      });
+    }catch(err){
+      alert('Could not read that workbook. Make sure it has a "MAIN SHEET" tab with Company, Company ID, PO/M, Date 1-4, EMPID, RP columns.\\n\\n'+err.message);
+    }
+    e.target.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+function showToast(msg){
+  let t = document.getElementById('toastEl');
+  if(!t){
+    t = document.createElement('div'); t.id='toastEl';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0f2547;color:#fff;'+
+      'padding:12px 20px;border-radius:10px;font-family:Inter,sans-serif;font-size:13px;z-index:999;box-shadow:0 10px 30px -10px rgba(0,0,0,.4);'+
+      'max-width:90vw;text-align:center;transition:opacity .3s;';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg; t.style.opacity='1';
+  clearTimeout(t._hideTimer);
+  t._hideTimer = setTimeout(()=>{ t.style.opacity='0'; }, 4200);
+}
+
+document.getElementById('prevMonth').addEventListener('click', ()=> shiftMonth(-1));
+document.getElementById('nextMonth').addEventListener('click', ()=> shiftMonth(1));
+document.getElementById('todayBtn').addEventListener('click', ()=>{
+  viewYear = today.getFullYear(); viewMonth = today.getMonth(); selectedDay = today.getDate();
+  loadMonth(monthKey(viewYear, viewMonth), ()=>{ rerenderAll(); updateUploadLock(); });
+});
+
+function shiftMonth(delta){
+  viewMonth += delta;
+  if(viewMonth<0){viewMonth=11; viewYear--;}
+  if(viewMonth>11){viewMonth=0; viewYear++;}
+  selectedDay = null;
+  loadMonth(monthKey(viewYear, viewMonth), ()=>{ rerenderAll(); updateUploadLock(); });
+}
+
+function updateUploadLock(){
+  const btn = document.getElementById('fileBtn');
+  const label = document.getElementById('uploadLabel');
+  const cur = isCurrentMonth(viewYear, viewMonth);
+  btn.classList.toggle('locked', !cur);
+  document.getElementById('fileInput').disabled = !cur;
+  const has = hasAnySchedule(monthKey(viewYear, viewMonth));
+  label.textContent = cur
+    ? (has ? "Update Schedule From Today (.xlsx)" : "Upload This Month's Schedule (.xlsx)")
+    : "Locked \u2014 past month";
+
+  const exportBtn = document.getElementById('exportBtn');
+  exportBtn.style.display = has ? 'inline-flex' : 'none';
+
+  const manageBtn = document.getElementById('manageCompaniesBtn');
+  if(canManageCompanies()){
+    manageBtn.style.display = 'inline-flex';
+    manageBtn.classList.toggle('locked', !cur);
+  }else{
+    manageBtn.style.display = 'none';
+  }
+}
+
+function exportExcel(){
+  const mk = monthKey(viewYear, viewMonth);
+  const rows = latestVersionRows(mk);
+  if(rows.length===0){ alert('No schedule to export for this month yet.'); return; }
+  const data = rows.map(r=>({
+    'Company': r.company,
+    'Company ID': r.companyId,
+    'PO/M': r.poM,
+    'Date 1': r.dates[0] ?? '',
+    'Date 2': r.dates[1] ?? '',
+    'Date 3': r.dates[2] ?? '',
+    'Date 4': r.dates[3] ?? '',
+    'EMPID': r.empId,
+    'RP': r.rp
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'MAIN SHEET');
+  XLSX.writeFile(wb, `PO_Schedule_${MONTH_NAMES[viewMonth]}_${viewYear}.xlsx`);
+  showToast('Exported the current ' + MONTH_NAMES[viewMonth] + ' schedule as an Excel file.');
+}
+document.getElementById('exportBtn').addEventListener('click', exportExcel);
+
+/* ---------------- Manage Companies (full table: edit all dates, add new) ---------------- */
+let manageRows = [];   // working copy while modal is open
+let manageIdSeq = 0;
+
+function openManageCompaniesModal(){
+  if(!canManageCompanies()) return;
+  if(!isCurrentMonth(viewYear, viewMonth)){
+    alert('Company details can only be edited for the current month. Past months are locked to protect their history.');
+    return;
+  }
+  const mk = monthKey(viewYear, viewMonth);
+  manageRows = latestVersionRows(mk).map(r=> ({ _id: 'r'+(manageIdSeq++), ...r, dates: r.dates.slice() }));
+
+  const overlay = document.createElement('div');
+  overlay.id = 'manageOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,37,71,0.5);z-index:300;'+
+    'display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div style="background:#fff;border-radius:16px;width:100%;max-width:1180px;max-height:88vh;
+      display:flex;flex-direction:column;box-shadow:0 24px 60px -14px rgba(0,0,0,.4);overflow:hidden;">
+    <div style="padding:22px 26px 16px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div>
+        <div style="font-family:'Fraunces',serif;font-size:22px;font-weight:600;color:var(--ink);">Manage Companies</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--slate);margin-top:3px;">${MONTH_NAMES[viewMonth]} ${viewYear} &middot; changes apply from today (${TODAY_DAY}) onward &middot; dates already logged on earlier days stay untouched</div>
+      </div>
+      <button id="manageCloseX" style="background:var(--panel-soft);border:1px solid var(--line);width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:16px;color:var(--slate);">&times;</button>
+    </div>
+    <div style="padding:14px 26px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <input id="manageSearch" type="text" placeholder="Filter by company name&hellip;" style="flex:1;min-width:180px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;font-family:'Inter',sans-serif;">
+      <button id="manageAddRow" style="padding:9px 16px;border-radius:8px;border:1px solid var(--blue);background:var(--blue-pale);color:var(--blue-deep);cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;white-space:nowrap;">+ Add Company</button>
+    </div>
+    <div style="overflow:auto;flex:1;padding:0 26px;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="position:sticky;top:0;background:#fff;z-index:2;">
+            <th style="text-align:left;padding:10px 6px;border-bottom:2px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--slate);text-transform:uppercase;">Company</th>
+            <th style="text-align:left;padding:10px 6px;border-bottom:2px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--slate);text-transform:uppercase;">Company ID</th>
+            <th style="text-align:left;padding:10px 6px;border-bottom:2px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--slate);text-transform:uppercase;">PO/M</th>
+            <th style="text-align:left;padding:10px 6px;border-bottom:2px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--slate);text-transform:uppercase;">Date 1</th>
+            <th style="text-align:left;padding:10px 6px;border-bottom:2px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--slate);text-transform:uppercase;">Date 2</th>
+            <th style="text-align:left;padding:10px 6px;border-bottom:2px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--slate);text-transform:uppercase;">Date 3</th>
+            <th style="text-align:left;padding:10px 6px;border-bottom:2px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--slate);text-transform:uppercase;">Date 4</th>
+            <th style="text-align:left;padding:10px 6px;border-bottom:2px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--slate);text-transform:uppercase;">EMPID</th>
+            <th style="text-align:left;padding:10px 6px;border-bottom:2px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--slate);text-transform:uppercase;">RP</th>
+            <th style="border-bottom:2px solid var(--line);"></th>
+          </tr>
+        </thead>
+        <tbody id="manageTbody"></tbody>
+      </table>
+    </div>
+    <div style="padding:16px 26px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px;">
+      <button id="manageCancel" style="padding:11px 20px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:'Inter',sans-serif;font-size:14px;">Cancel</button>
+      <button id="manageSaveAll" style="padding:11px 22px;border-radius:8px;border:none;background:var(--blue);color:#fff;cursor:pointer;font-family:'Inter',sans-serif;font-weight:600;font-size:14px;">Save All Changes</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  const dCell = (val)=> `<input type="number" class="mg-date" min="1" max="31" value="${val ?? ''}" style="width:56px;padding:6px 4px;border:1px solid var(--line);border-radius:5px;font-size:12.5px;text-align:center;">`;
+  const tCell = (cls, val, width)=> `<input type="text" class="${cls}" value="${escapeHtml(String(val ?? ''))}" style="width:${width};padding:6px 8px;border:1px solid var(--line);border-radius:5px;font-size:12.5px;">`;
+
+  function renderRows(filter){
+    const tbody = document.getElementById('manageTbody');
+    const q = (filter||'').trim().toLowerCase();
+    tbody.innerHTML = manageRows
+      .map((r, idx)=> ({r, idx}))
+      .filter(({r})=> !q || r.company.toLowerCase().includes(q))
+      .map(({r, idx})=> `
+        <tr data-rid="${r._id}" style="border-bottom:1px solid var(--line);">
+          <td style="padding:6px 6px;">${tCell('mg-company', r.company, '150px')}</td>
+          <td style="padding:6px 6px;">${tCell('mg-id', r.companyId, '80px')}</td>
+          <td style="padding:6px 6px;">${tCell('mg-pom', r.poM, '50px')}</td>
+          <td style="padding:6px 6px;">${dCell(r.dates[0])}</td>
+          <td style="padding:6px 6px;">${dCell(r.dates[1])}</td>
+          <td style="padding:6px 6px;">${dCell(r.dates[2])}</td>
+          <td style="padding:6px 6px;">${dCell(r.dates[3])}</td>
+          <td style="padding:6px 6px;">${tCell('mg-emp', r.empId, '80px')}</td>
+          <td style="padding:6px 6px;">${tCell('mg-rp', r.rp, '80px')}</td>
+          <td style="padding:6px 6px;"><button class="mg-del" title="Remove company" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;">&times;</button></td>
+        </tr>`).join('');
+    tbody.querySelectorAll('.mg-del').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{
+        const tr = e.target.closest('tr');
+        const rid = tr.dataset.rid;
+        manageRows = manageRows.filter(r=> r._id !== rid);
+        renderRows(document.getElementById('manageSearch').value);
+      });
+    });
+  }
+  renderRows('');
+
+  document.getElementById('manageSearch').addEventListener('input', (e)=> renderRows(e.target.value));
+  document.getElementById('manageAddRow').addEventListener('click', ()=>{
+    manageRows.push({ _id:'r'+(manageIdSeq++), company:'', companyId:'', poM:'', dates:[], empId:'', rp:'' });
+    renderRows(document.getElementById('manageSearch').value);
+    document.querySelector('#manageTbody tr:last-child .mg-company')?.focus();
+  });
+
+  function closeModal(){ overlay.remove(); }
+  document.getElementById('manageCloseX').addEventListener('click', closeModal);
+  document.getElementById('manageCancel').addEventListener('click', closeModal);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+
+  document.getElementById('manageSaveAll').addEventListener('click', ()=>{
+    // Read every rendered row's live input values back into manageRows before saving
+    document.querySelectorAll('#manageTbody tr').forEach(tr=>{
+      const rid = tr.dataset.rid;
+      const row = manageRows.find(r=> r._id === rid);
+      if(!row) return;
+      row.company = tr.querySelector('.mg-company').value.trim();
+      row.companyId = tr.querySelector('.mg-id').value.trim();
+      row.poM = tr.querySelector('.mg-pom').value.trim();
+      row.empId = tr.querySelector('.mg-emp').value.trim();
+      row.rp = tr.querySelector('.mg-rp').value.trim().toUpperCase();
+      row.dates = Array.from(tr.querySelectorAll('.mg-date'))
+        .map(inp=> parseInt(inp.value, 10))
+        .filter(n=> n && n>=1 && n<=daysInMonth(viewYear,viewMonth));
+    });
+    const cleaned = manageRows
+      .filter(r=> r.company)
+      .map(({_id, ...rest})=> rest);
+
+    if(cleaned.length === 0){ alert('Add at least one company with a name before saving.'); return; }
+
+    addScheduleVersion(mk, cleaned).then(()=>{
+      if(!FIREBASE_ENABLED) rerenderAll();
+      showToast('Company list updated. Applies from today onward \u2014 earlier logged dates stay exactly as they were.');
+      closeModal();
+    });
+  });
+}
+document.getElementById('manageCompaniesBtn').addEventListener('click', openManageCompaniesModal);
+
+function currentStatuses(){ return statusCache[monthKey(viewYear, viewMonth)] || {}; }
+function currentReschedules(){ return rescheduleCache[monthKey(viewYear, viewMonth)] || {}; }
+function rescheduleKey(day, companyId){ return `${day}_${companyId}`; }
+
+// Companies actually due on a given day, honoring any reschedules: an item
+// moved AWAY from this day no longer appears here (so it never sits as
+// "pending" on its old date), and an item moved INTO this day from
+// elsewhere appears here instead, tagged with where it came from. The
+// underlying recurring schedule itself is never touched by a reschedule.
+function companiesForDay(day){
+  const mk = monthKey(viewYear, viewMonth);
+  const resched = currentReschedules();
+  let base = effectiveRowsForDay(mk, day).filter(r => r.dates.includes(day) && (activePerson==="ALL" || r.rp === activePerson));
+  base = base.filter(r=>{
+    const rec = resched[rescheduleKey(day, r.companyId)];
+    return !(rec && rec.movedTo && rec.movedTo !== day);
+  });
+  const incoming = [];
+  Object.keys(resched).forEach(k=>{
+    const rec = resched[k];
+    if(!rec || rec.movedTo !== day) return;
+    const idx = k.lastIndexOf('_');
+    const origDay = parseInt(k.slice(0, idx), 10);
+    const cid = k.slice(idx+1);
+    if(origDay === day) return;
+    const src = latestVersionRows(mk).find(r=>r.companyId===cid) || effectiveRowsForDay(mk, origDay).find(r=>r.companyId===cid);
+    if(src && (activePerson==="ALL" || src.rp===activePerson)){
+      incoming.push({ ...src, _rescheduledFrom: origDay, _rescheduleComment: rec.comment || '' });
+    }
+  });
+  return base.concat(incoming);
+}
+
+function getStatus(day, companyId){
+  const v = currentStatuses()[`${day}_${companyId}`];
+  if(!v) return null;
+  return typeof v === 'string' ? v : v.s;
+}
+function getComment(day, companyId){
+  const v = currentStatuses()[`${day}_${companyId}`];
+  if(!v || typeof v === 'string') return '';
+  return v.c || '';
+}
+function toggleStatusValue(day, companyId, kind, comment){
+  const cur = getStatus(day, companyId);
+  const next = cur === kind ? null : kind;
+  const mk = monthKey(viewYear, viewMonth);
+  const value = next ? { s: next, c: (kind==='hold' ? (comment||'') : '') } : null;
+  setStatusEntry(mk, `${day}_${companyId}`, value);
+  const local = statusCache[mk] || {};
+  if(value) local[`${day}_${companyId}`] = value; else delete local[`${day}_${companyId}`];
+  statusCache[mk] = local;
+}
+
+function renderPersonChips(){
+  const row = document.getElementById('personRow');
+  row.innerHTML = '';
+  const mk = monthKey(viewYear, viewMonth);
+  const set = new Set();
+  sortedVersions(mk).forEach(v=> v.rows.forEach(r=> r.rp && set.add(r.rp)));
+  const all = ["ALL", ...Array.from(set).sort()];
+  all.forEach(p=>{
+    const chip = document.createElement('button');
+    chip.className = 'person-chip' + (activePerson===p ? ' active' : '');
+    chip.textContent = p==="ALL" ? "All People" : p;
+    chip.addEventListener('click', ()=>{ activePerson = p; rerenderAll(); });
+    row.appendChild(chip);
+  });
+}
+
+function renderCalendar(){
+  renderPersonChips();
+  document.getElementById('calTitle').innerHTML =
+    `${MONTH_NAMES[viewMonth]} ${viewYear} <span class="month-tag ${isCurrentMonth(viewYear,viewMonth)?'current':'past'}">${isCurrentMonth(viewYear,viewMonth)?'current \u00b7 editable':'locked history'}</span>`;
+
+  const grid = document.getElementById('calGrid');
+  grid.innerHTML = '';
+  const firstDow = new Date(viewYear, viewMonth, 1).getDay();
+  const total = daysInMonth(viewYear, viewMonth);
+  for(let i=0;i<firstDow;i++){ const b=document.createElement('div'); b.className='day blank'; grid.appendChild(b); }
+  for(let d=1; d<=total; d++){ grid.appendChild(buildDayCell(d)); }
+  renderMtdStat();
+}
+
+/* ---------------- Month-to-date completion ---------------- */
+function monthToDateStats(){
+  const total = daysInMonth(viewYear, viewMonth);
+  const untilDay = isCurrentMonth(viewYear, viewMonth) ? TODAY_DAY : total;
+  let totalPOs = 0, doneCount = 0;
+  for(let d=1; d<=untilDay; d++){
+    const rows = companiesForDay(d);
+    totalPOs += rows.length;
+    doneCount += rows.filter(r=> getStatus(d, r.companyId)==='done').length;
+  }
+  return { untilDay, totalPOs, doneCount, pct: totalPOs ? Math.round(doneCount/totalPOs*100) : 0 };
+}
+
+function renderMtdStat(){
+  const el = document.getElementById('mtdStat');
+  if(!hasAnySchedule(monthKey(viewYear, viewMonth))){ el.style.display='none'; return; }
+  el.style.display='flex';
+  const s = monthToDateStats();
+  el.innerHTML = `
+    <div class="mtd-pct">${s.pct}%</div>
+    <div class="mtd-body">
+      <div class="mtd-label">Done through ${s.untilDay} ${MONTH_NAMES[viewMonth].slice(0,3)} &middot; ${s.doneCount}/${s.totalPOs} POs &middot; ${activePerson==="ALL"?"All People":activePerson}</div>
+      <div class="mtd-track"><div class="mtd-fill" style="width:${s.pct}%"></div></div>
+    </div>`;
+}
+
+function buildDayCell(d){
+  const companies = companiesForDay(d);
+  const cell = document.createElement('div');
+  cell.dataset.day = d;
+  cell.className = 'day' + (companies.length? ' has-po':'') + (selectedDay===d?' selected':'') +
+    (d===today.getDate() && viewMonth===today.getMonth() && viewYear===today.getFullYear() ? ' today':'');
+  const allDone = companies.length>0 && companies.every(c=>getStatus(d,c.companyId)==='done');
+  const num = document.createElement('div'); num.className='num'; num.textContent=d;
+  cell.appendChild(num);
+  if(allDone){ const dot=document.createElement('div'); dot.className='allclear'; cell.appendChild(dot); }
+  const tally = document.createElement('div'); tally.className='tally';
+  companies.slice(0,8).forEach(()=>{ const i=document.createElement('i'); tally.appendChild(i); });
+  cell.appendChild(tally);
+  cell.addEventListener('click', ()=>{ selectedDay=d; renderCalendar(); renderSideScrollSafe(); });
+  return cell;
+}
+
+function refreshDayCell(d){
+  const grid = document.getElementById('calGrid');
+  const old = grid.querySelector(`.day[data-day="${d}"]`);
+  if(old) old.replaceWith(buildDayCell(d));
+}
+
+// Wrapper that preserves the PO list's scroll position across any full
+// re-render (including ones triggered by a live Firestore update from a
+// teammate) - this is what stops the list "jumping to top" while ticking.
+function renderSideScrollSafe(){
+  const side = document.getElementById('side');
+  const existingList = side.querySelector('.po-list');
+  const scrollPos = existingList ? existingList.scrollTop : 0;
+  const pageY = window.scrollY;
+  if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  renderSide();
+  const newList = side.querySelector('.po-list');
+  if(newList) newList.scrollTop = scrollPos;
+  if(Math.abs(window.scrollY - pageY) > 1) window.scrollTo(0, pageY);
+}
+
+function renderSide(){
+  const side = document.getElementById('side');
+  side.innerHTML = '';
+  const mk = monthKey(viewYear, viewMonth);
+
+  if(!hasAnySchedule(mk)){
+    const cur = isCurrentMonth(viewYear, viewMonth);
+    side.innerHTML = `<div class="empty-day">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>
+      <p>${cur ? "No schedule uploaded for "+MONTH_NAMES[viewMonth]+" yet. Use the upload button above to start this month\u2019s log." : "No schedule was ever uploaded for "+MONTH_NAMES[viewMonth]+" "+viewYear+"."}</p>
+    </div>`;
+    return;
+  }
+
+  if(!selectedDay){
+    side.innerHTML = `<div class="empty-day"><p>Pick a date on the ledger to see its POs.</p></div>`;
+    return;
+  }
+
+  const allCompanies = companiesForDay(selectedDay);
+  const dateObj = new Date(viewYear, viewMonth, selectedDay);
+  const wk = dateObj.toLocaleDateString('en-US', {weekday:'long'});
+  const head = document.createElement('div');
+  head.innerHTML = `<div class="side-date">${wk}, ${selectedDay}</div>
+    <div class="side-sub">${MONTH_NAMES[viewMonth]} ${viewYear} &middot; ${activePerson==="ALL"?"All People":activePerson}</div>`;
+  side.appendChild(head);
+
+  if(allCompanies.length===0){
+    const e = document.createElement('div');
+    e.className='empty-day';
+    e.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><p>No purchase orders scheduled for this date.</p>`;
+    side.appendChild(e);
+    return;
+  }
+
+  const pendingList = allCompanies.filter(c=>!getStatus(selectedDay,c.companyId));
+  const doneList = allCompanies.filter(c=>getStatus(selectedDay,c.companyId)==='done');
+  const holdList = allCompanies.filter(c=>getStatus(selectedDay,c.companyId)==='hold');
+
+  const badges = document.createElement('div');
+  badges.className='status-badges';
+  badges.innerHTML = `
+    <div class="status-badge pending ${statusFilter==='pending'?'active':''}" data-f="pending"><span class="count">${pendingList.length}</span><span class="lbl">Pending</span></div>
+    <div class="status-badge done ${statusFilter==='done'?'active':''}" data-f="done"><span class="count">${doneList.length}</span><span class="lbl">Done</span></div>
+    <div class="status-badge hold ${statusFilter==='hold'?'active':''}" data-f="hold"><span class="count">${holdList.length}</span><span class="lbl">Hold</span></div>`;
+  badges.querySelectorAll('.status-badge').forEach(b=>{
+    b.addEventListener('click', ()=>{ const f=b.dataset.f; statusFilter = statusFilter===f?'all':f; renderSideScrollSafe(); });
+  });
+  side.appendChild(badges);
+
+  const pct = Math.round((doneList.length/allCompanies.length)*100);
+  const prow = document.createElement('div');
+  prow.className='progress-row';
+  prow.innerHTML = `<div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+    <div class="progress-label">${doneList.length}/${allCompanies.length} done</div>`;
+  side.appendChild(prow);
+
+  const shown = statusFilter==='all' ? allCompanies : statusFilter==='pending' ? pendingList : statusFilter==='done' ? doneList : holdList;
+  const list = document.createElement('ul');
+  list.className='po-list';
+  if(shown.length===0){
+    list.innerHTML = `<div class="empty-day" style="padding:24px 8px;"><p>Nothing in this filter.</p></div>`;
+  }else{
+    shown.forEach(c=> list.appendChild(buildItem(c)));
+  }
+  side.appendChild(list);
+}
+
+function buildItem(c){
+  const status = getStatus(selectedDay, c.companyId);
+  const comment = getComment(selectedDay, c.companyId);
+  const li = document.createElement('li');
+  li.className='po-item' + (status?' '+status:'');
+  li.dataset.cid = c.companyId;
+  const canStatus = canMarkStatus();
+  const canResched = canReschedule();
+  const reschedBtnHtml = canResched ? `<button class="act-btn resched-btn" title="Reschedule to a new date"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/><path d="M9 15l2 2 4-4"/></svg></button>` : '';
+  const actionsHtml = canStatus ? `
+    <div class="item-actions">
+      ${reschedBtnHtml}
+      <button class="act-btn hold-btn" title="Hold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+      <button class="act-btn done-btn" title="Mark done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></button>
+    </div>` : `<div class="item-actions">${reschedBtnHtml}<span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--slate);text-transform:uppercase;letter-spacing:.05em;">${status || 'pending'}</span></div>`;
+
+  const badges = [];
+  if(c._rescheduledFrom){
+    badges.push(`<span title="${c._rescheduleComment ? escapeHtml(c._rescheduleComment) : ''}" style="display:inline-block;margin-top:4px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--blue-deep);background:var(--blue-pale);padding:2px 7px;border-radius:5px;">&#8617; rescheduled from ${c._rescheduledFrom} ${MONTH_NAMES[viewMonth].slice(0,3)}</span>`);
+  }
+  if(status==='hold' && comment){
+    badges.push(`<span title="${escapeHtml(comment)}" style="display:inline-block;margin-top:4px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--amber);background:var(--amber-pale);padding:2px 7px;border-radius:5px;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">&#128172; ${escapeHtml(comment)}</span>`);
+  }
+
+  li.innerHTML = `
+    <div class="info">
+      <div class="name">${escapeHtml(c.company)}</div>
+      <div class="meta">ID ${c.companyId} &middot; ${c.poM} PO/mo &middot; ${c.rp}</div>
+      ${badges.join('')}
+    </div>
+    ${actionsHtml}`;
+  if(canStatus){
+    const doneBtn = li.querySelector('.done-btn');
+    const holdBtn = li.querySelector('.hold-btn');
+    doneBtn.addEventListener('mousedown', e=> e.preventDefault());
+    holdBtn.addEventListener('mousedown', e=> e.preventDefault());
+    doneBtn.addEventListener('click', ()=> handleToggle(c, 'done'));
+    holdBtn.addEventListener('click', ()=> handleToggle(c, 'hold'));
+  }
+  if(canResched){
+    const reschedBtn = li.querySelector('.resched-btn');
+    reschedBtn.addEventListener('mousedown', e=> e.preventDefault());
+    reschedBtn.addEventListener('click', ()=> openRescheduleModal(c));
+  }
+  return li;
+}
+
+// Toggle a company's status WITHOUT rebuilding the whole scrollable list -
+// keeps scroll position intact while ticking items down a long list.
+function handleToggle(c, kind){
+  const current = getStatus(selectedDay, c.companyId);
+  const turningOn = current !== kind;
+  if(kind === 'hold' && turningOn){
+    openHoldCommentModal(c);
+    return;
+  }
+  applyToggle(c, kind, '');
+}
+
+function applyToggle(c, kind, comment){
+  toggleStatusValue(selectedDay, c.companyId, kind, comment);
+  refreshDayCell(selectedDay);
+  const newStatus = getStatus(selectedDay, c.companyId);
+  updateHoldCountPill();
+  renderMtdStat();
+
+  if(statusFilter !== 'all' && statusFilter !== newStatus){
+    const li = document.querySelector(`.po-item[data-cid="${cssEscape(c.companyId)}"]`);
+    if(li){ li.style.transition='opacity .2s, transform .2s'; li.style.opacity='0'; li.style.transform='translateX(8px)';
+      setTimeout(()=> renderSideScrollSafe(), 180); }
+    else renderSideScrollSafe();
+  }else{
+    const li = document.querySelector(`.po-item[data-cid="${cssEscape(c.companyId)}"]`);
+    if(li) li.replaceWith(buildItem(c));
+    updateSummary();
+  }
+}
+
+function openHoldCommentModal(c){
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,37,71,0.45);z-index:250;'+
+    'display:flex;align-items:center;justify-content:center;padding:20px;';
+  const existing = getComment(selectedDay, c.companyId);
+  overlay.innerHTML = `<div style="background:#fff;border-radius:14px;padding:26px;max-width:380px;width:100%;box-shadow:0 20px 50px -12px rgba(0,0,0,.35);">
+    <div style="font-family:'Fraunces',serif;font-size:19px;font-weight:600;color:var(--ink);margin-bottom:4px;">Hold ${escapeHtml(c.company)}</div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--slate);margin-bottom:16px;">${selectedDay} ${MONTH_NAMES[viewMonth]}</div>
+    <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--slate);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Reason for hold (optional)</label>
+    <textarea id="holdCommentInput" rows="3" placeholder="e.g. waiting on distributor confirmation" style="width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:8px;font-size:14px;font-family:'Inter',sans-serif;resize:vertical;margin-bottom:18px;">${escapeHtml(existing)}</textarea>
+    <div style="display:flex;gap:10px;">
+      <button id="holdCancel" style="flex:1;padding:11px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:'Inter',sans-serif;font-size:14px;">Cancel</button>
+      <button id="holdSave" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--amber);color:#fff;cursor:pointer;font-family:'Inter',sans-serif;font-weight:600;font-size:14px;">Put on Hold</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const closeModal = ()=> overlay.remove();
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+  document.getElementById('holdCancel').addEventListener('click', closeModal);
+  document.getElementById('holdSave').addEventListener('click', ()=>{
+    const comment = document.getElementById('holdCommentInput').value.trim();
+    applyToggle(c, 'hold', comment);
+    closeModal();
+  });
+  setTimeout(()=> document.getElementById('holdCommentInput')?.focus(), 50);
+}
+
+/* ---------------- Reschedule (temporary move, permanent schedule untouched) ---------------- */
+function openRescheduleModal(c){
+  const mk = monthKey(viewYear, viewMonth);
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,37,71,0.45);z-index:250;'+
+    'display:flex;align-items:center;justify-content:center;padding:20px;';
+  const isAlreadyRescheduledIn = !!c._rescheduledFrom;
+  overlay.innerHTML = `<div style="background:#fff;border-radius:14px;padding:26px;max-width:380px;width:100%;box-shadow:0 20px 50px -12px rgba(0,0,0,.35);">
+    <div style="font-family:'Fraunces',serif;font-size:19px;font-weight:600;color:var(--ink);margin-bottom:4px;">Reschedule ${escapeHtml(c.company)}</div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--slate);margin-bottom:16px;">Currently showing on ${selectedDay} ${MONTH_NAMES[viewMonth]}</div>
+    <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--slate);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Move to which day this month?</label>
+    <input type="number" id="reschedDayInput" min="1" max="${daysInMonth(viewYear,viewMonth)}" value="${selectedDay}"
+      style="width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:8px;font-size:15px;margin-bottom:14px;">
+    <label style="display:block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--slate);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Reason (optional)</label>
+    <textarea id="reschedCommentInput" rows="2" placeholder="e.g. distributor asked to push by a week" style="width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:8px;font-size:14px;font-family:'Inter',sans-serif;resize:vertical;margin-bottom:10px;"></textarea>
+    <div style="font-size:11.5px;color:var(--slate);margin-bottom:18px;line-height:1.5;">This only moves this month's occurrence. The permanent recurring schedule is not changed \u2014 it never sits pending on the old date, it just appears on the new one instead.</div>
+    <div style="display:flex;gap:10px;">
+      ${isAlreadyRescheduledIn ? `<button id="reschedUndo" style="flex:1;padding:11px;border-radius:8px;border:1px solid var(--red);color:var(--red);background:#fff;cursor:pointer;font-family:'Inter',sans-serif;font-size:13px;">Undo Reschedule</button>` : `<button id="reschedCancel" style="flex:1;padding:11px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:'Inter',sans-serif;font-size:14px;">Cancel</button>`}
+      <button id="reschedSave" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--blue);color:#fff;cursor:pointer;font-family:'Inter',sans-serif;font-weight:600;font-size:14px;">Save</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const closeModal = ()=> overlay.remove();
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+  document.getElementById('reschedCancel')?.addEventListener('click', closeModal);
+  document.getElementById('reschedUndo')?.addEventListener('click', ()=>{
+    const origDay = c._rescheduledFrom;
+    setRescheduleEntry(mk, rescheduleKey(origDay, c.companyId), null);
+    const local = rescheduleCache[mk] || {};
+    delete local[rescheduleKey(origDay, c.companyId)];
+    rescheduleCache[mk] = local;
+    refreshDayCell(origDay); refreshDayCell(selectedDay);
+    renderSideScrollSafe(); updateHoldCountPill(); renderMtdStat();
+    showToast(`${c.company} moved back to its original date (${origDay} ${MONTH_NAMES[viewMonth]}).`);
+    closeModal();
+  });
+  document.getElementById('reschedSave').addEventListener('click', ()=>{
+    const newDay = parseInt(document.getElementById('reschedDayInput').value, 10);
+    const comment = document.getElementById('reschedCommentInput').value.trim();
+    if(!newDay || newDay<1 || newDay>daysInMonth(viewYear,viewMonth)){ alert('Enter a valid day number for this month.'); return; }
+    if(newDay === selectedDay){ alert('Pick a different day to reschedule to.'); return; }
+    // If this item was itself already a reschedule-in, move the record that
+    // points at it (keyed by its true original day) rather than stacking a
+    // second layer of reschedules.
+    const origDay = c._rescheduledFrom || selectedDay;
+    const key = rescheduleKey(origDay, c.companyId);
+    const value = { movedTo: newDay, comment, movedAt: Date.now() };
+    setRescheduleEntry(mk, key, value);
+    const local = rescheduleCache[mk] || {};
+    local[key] = value;
+    rescheduleCache[mk] = local;
+    refreshDayCell(origDay); refreshDayCell(selectedDay); refreshDayCell(newDay);
+    renderSideScrollSafe(); updateHoldCountPill(); renderMtdStat();
+    showToast(`${c.company} rescheduled to ${newDay} ${MONTH_NAMES[viewMonth]}. The recurring schedule itself is unchanged.`);
+    closeModal();
+  });
+}
+
+function updateSummary(){
+  if(!selectedDay) return;
+  const allCompanies = companiesForDay(selectedDay);
+  const pendingList = allCompanies.filter(c=>!getStatus(selectedDay,c.companyId));
+  const doneList = allCompanies.filter(c=>getStatus(selectedDay,c.companyId)==='done');
+  const holdList = allCompanies.filter(c=>getStatus(selectedDay,c.companyId)==='hold');
+  const side = document.getElementById('side');
+  const badge = side.querySelectorAll('.status-badge .count');
+  if(badge.length===3){ badge[0].textContent=pendingList.length; badge[1].textContent=doneList.length; badge[2].textContent=holdList.length; }
+  const pct = allCompanies.length ? Math.round((doneList.length/allCompanies.length)*100) : 0;
+  const fill = side.querySelector('.progress-fill');
+  const label = side.querySelector('.progress-label');
+  if(fill) fill.style.width = pct + '%';
+  if(label) label.textContent = `${doneList.length}/${allCompanies.length} done`;
+}
+
+function cssEscape(s){ return String(s).replace(/["\\]/g, '\\$&'); }
+function escapeHtml(s){ return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+/* ---------------- HOLD LOG (all held POs, any day, this month) ---------------- */
+function collectHolds(){
+  const mk = monthKey(viewYear, viewMonth);
+  const statuses = currentStatuses();
+  const items = [];
+  Object.keys(statuses).forEach(key=>{
+    const v = statuses[key];
+    const s = typeof v === 'string' ? v : (v && v.s);
+    if(s !== 'hold') return;
+    const comment = typeof v === 'string' ? '' : (v.c || '');
+    const idx = key.indexOf('_');
+    const day = parseInt(key.slice(0, idx), 10);
+    const companyId = key.slice(idx+1);
+    const dayRows = effectiveRowsForDay(mk, day);
+    const row = dayRows.find(r=>r.companyId===companyId) || latestVersionRows(mk).find(r=>r.companyId===companyId);
+    if(row && (activePerson==="ALL" || row.rp===activePerson)){
+      items.push({ day, row, comment });
+    }
+  });
+  items.sort((a,b)=> a.day - b.day);
+  return items;
+}
+
+function updateHoldCountPill(){
+  const pill = document.getElementById('holdCountPill');
+  if(!pill) return;
+  pill.textContent = collectHolds().length;
+}
+
+function renderHoldLog(){
+  const panel = document.getElementById('holdLogPanel');
+  const holds = collectHolds();
+  const head = `<div class="hold-log-head">
+      <div>
+        <div class="hold-log-title">Held Purchase Orders</div>
+        <div class="hold-log-sub">${MONTH_NAMES[viewMonth]} ${viewYear} &middot; every date this month &middot; ${activePerson==="ALL"?"All People":activePerson}</div>
+      </div>
+    </div>`;
+
+  if(holds.length===0){
+    panel.innerHTML = head + `<div class="empty-day" style="padding:40px 10px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      <p>No POs are currently on hold for ${MONTH_NAMES[viewMonth]}.</p></div>`;
+    return;
+  }
+
+  const showActions = canMarkStatus();
+  const rowsHtml = holds.map(({day, row, comment})=>{
+    const dateStr = `${day} ${MONTH_NAMES[viewMonth].slice(0,3)}`;
+    const actionCell = showActions
+      ? `<td class="hold-actions">
+        <button class="hold-mini-btn release" title="Remove hold, back to pending">Release</button>
+        <button class="hold-mini-btn done" title="Mark done instead">Mark Done</button>
+      </td>`
+      : `<td class="hold-actions"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--slate);">view only</span></td>`;
+    return `<tr data-day="${day}" data-cid="${escapeHtml(row.companyId)}">
+      <td><span class="hold-date-badge">${dateStr}</span></td>
+      <td><strong>${escapeHtml(row.company)}</strong><br><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--slate);">ID ${escapeHtml(row.companyId)}</span></td>
+      <td>${escapeHtml(row.rp)}</td>
+      <td>${escapeHtml(String(row.poM))}/mo</td>
+      <td style="max-width:220px;font-size:12.5px;color:${comment ? 'var(--ink)' : 'var(--slate-dim)'};">${comment ? escapeHtml(comment) : '&mdash;'}</td>
+      ${actionCell}
+    </tr>`;
+  }).join('');
+
+  panel.innerHTML = head + `<div style="overflow-x:auto;"><table class="hold-table">
+    <thead><tr><th>Date</th><th>Company</th><th>Person</th><th>Frequency</th><th>Comment</th><th>Action</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table></div>`;
+
+  panel.querySelectorAll('.hold-mini-btn.release').forEach(btn=>{
+    btn.addEventListener('mousedown', e=> e.preventDefault());
+    btn.addEventListener('click', (e)=>{
+      const pageY = window.scrollY;
+      const tr = e.target.closest('tr');
+      const day = parseInt(tr.dataset.day, 10), cid = tr.dataset.cid;
+      setStatusEntry(monthKey(viewYear, viewMonth), `${day}_${cid}`, null);
+      const local = statusCache[monthKey(viewYear, viewMonth)] || {};
+      delete local[`${day}_${cid}`];
+      statusCache[monthKey(viewYear, viewMonth)] = local;
+      renderHoldLog(); updateHoldCountPill(); renderMtdStat();
+      if(Math.abs(window.scrollY - pageY) > 1) window.scrollTo(0, pageY);
+    });
+  });
+  panel.querySelectorAll('.hold-mini-btn.done').forEach(btn=>{
+    btn.addEventListener('mousedown', e=> e.preventDefault());
+    btn.addEventListener('click', (e)=>{
+      const pageY = window.scrollY;
+      const tr = e.target.closest('tr');
+      const day = parseInt(tr.dataset.day, 10), cid = tr.dataset.cid;
+      setStatusEntry(monthKey(viewYear, viewMonth), `${day}_${cid}`, { s: 'done', c: '' });
+      const local = statusCache[monthKey(viewYear, viewMonth)] || {};
+      local[`${day}_${cid}`] = { s: 'done', c: '' };
+      statusCache[monthKey(viewYear, viewMonth)] = local;
+      renderHoldLog(); updateHoldCountPill(); renderMtdStat();
+      if(Math.abs(window.scrollY - pageY) > 1) window.scrollTo(0, pageY);
+    });
+  });
+}
+
+/* ---------------- SEARCH (version-aware: shows only real effective dates) ---------------- */
+const searchInput = document.getElementById('searchInput');
+const searchResults = document.getElementById('searchResults');
+searchInput.addEventListener('input', ()=>{
+  const q = searchInput.value.trim().toLowerCase();
+  if(!q){ searchResults.classList.remove('show'); searchResults.innerHTML=''; return; }
+  const mk = monthKey(viewYear, viewMonth);
+  const total = daysInMonth(viewYear, viewMonth);
+
+  const candidates = new Map();
+  sortedVersions(mk).forEach(v=> v.rows.forEach(r=>{
+    if(r.company.toLowerCase().includes(q)) candidates.set(r.companyId, r);
+  }));
+
+  const results = [];
+  candidates.forEach((row, cid)=>{
+    const effDays = [];
+    for(let d=1; d<=total; d++){
+      const dayRows = effectiveRowsForDay(mk, d);
+      if(dayRows.some(x=> x.companyId===cid && x.dates.includes(d))) effDays.push(d);
+    }
+    results.push({ ...row, effDays });
+  });
+
+  const shown = results.slice(0,12);
+  if(shown.length===0){
+    searchResults.innerHTML = `<div class="sr-empty">No company matches &ldquo;${escapeHtml(searchInput.value)}&rdquo; in ${MONTH_NAMES[viewMonth]}'s schedule</div>`;
+  }else{
+    searchResults.innerHTML = shown.map(c=>{
+      const chips = c.effDays.length ? c.effDays.map(d=>{
+        const st = getStatus(d, c.companyId);
+        return `<span class="sr-date-chip ${st||''}" data-day="${d}">${d} ${MONTH_NAMES[viewMonth].slice(0,3)}</span>`;
+      }).join('') : `<span class="sr-meta">No upcoming dates this month</span>`;
+      return `<div class="sr-item"><div class="sr-name">${escapeHtml(c.company)}</div>
+        <div class="sr-meta">ID ${c.companyId} &middot; ${c.poM} PO/mo &middot; ${c.rp}</div>
+        <div class="sr-dates">${chips}</div></div>`;
+    }).join('');
+  }
+  searchResults.classList.add('show');
+});
+searchResults.addEventListener('click', (e)=>{
+  const chip = e.target.closest('.sr-date-chip');
+  if(!chip) return;
+  selectedDay = parseInt(chip.dataset.day, 10);
+  searchResults.classList.remove('show');
+  searchInput.value='';
+  renderCalendar(); renderSideScrollSafe();
+  document.getElementById('board').scrollIntoView({behavior:'smooth', block:'start'});
+});
+document.addEventListener('click', (e)=>{ if(!e.target.closest('.search-wrap')) searchResults.classList.remove('show'); });
+
+/* ---------------- Auto sign-out after 5 minutes of inactivity ----------------
+   Uses a single timestamp updated on activity, checked every few seconds -
+   NOT a setTimeout re-armed on every mousemove (that was creating/destroying
+   dozens of timers per second, which some browsers mis-schedule under load,
+   causing early sign-outs regardless of real activity). */
+const INACTIVITY_LIMIT_MS = 5 * 60 * 1000;
+const INACTIVITY_WARN_MS = 4.5 * 60 * 1000;
+let lastActivityAt = Date.now();
+let idleWarned = false;
+function markActivity(){ lastActivityAt = Date.now(); idleWarned = false; }
+['mousemove','mousedown','keydown','scroll','touchstart','touchmove','wheel','input','pointerdown','focus'].forEach(evt=>{
+  document.addEventListener(evt, markActivity, {passive:true, capture:true});
+});
+setInterval(()=>{
+  if(!FIREBASE_ENABLED || !auth || !auth.currentUser) return;
+  const idleFor = Date.now() - lastActivityAt;
+  if(idleFor >= INACTIVITY_LIMIT_MS){
+    auth.signOut();
+  }else if(idleFor >= INACTIVITY_WARN_MS && !idleWarned){
+    idleWarned = true;
+    showToast('You\u2019ve been idle for a while \u2014 you\u2019ll be signed out in 30 seconds unless you interact.');
+  }
+}, 5000);
+function resetInactivityTimer(){ markActivity(); }
+
+initAuth();
+</script>
+</body>
+</html>
+
